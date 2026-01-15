@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Folder, FileText, ChevronRight, ChevronDown, Image as ImageIcon, FileJson, ExternalLink } from 'lucide-react';
+import { Folder, FileText, ChevronRight, ChevronDown, Image as ImageIcon, FileJson, ExternalLink, FilePlus, FolderPlus, Edit2, Check, X, Trash2 } from 'lucide-react';
 
-export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, onOpenProject }) {
+export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, onOpenProject, onRename, onDelete, onCreateFile, onCreateFolder, refreshTrigger }) {
     const [files, setFiles] = useState([]);
     const [expandedFolders, setExpandedFolders] = useState({});
+    const [editingPath, setEditingPath] = useState(null);
+    const [tempName, setTempName] = useState('');
 
     // Recursive function to scan directory
     const scanDirectory = async (handle) => {
@@ -51,7 +53,7 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
         loadFiles();
 
         return () => { mounted = false; };
-    }, [dirHandle]);
+    }, [dirHandle, refreshTrigger]);
 
     if (!dirHandle) {
         return (
@@ -134,16 +136,62 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                 if (node.name.endsWith('.bib')) Icon = FileJson;
 
                 const isActive = currentFilename === node.name;
+                const isEditing = editingPath === path;
 
                 return (
                     <div
                         key={path}
                         className={`file-tree-item file ${isActive ? 'active' : ''}`}
-                        onClick={() => onFileSelect(node.handle)}
+                        onClick={() => !isEditing && onFileSelect(node.handle)}
+                        draggable
+                        onDragStart={(e) => {
+                            // Extract relative path
+                            const relativePath = path.startsWith('/') ? path.substring(1) : path;
+                            e.dataTransfer.setData('text/plain', relativePath);
+                            e.dataTransfer.setData('application/json', JSON.stringify({
+                                name: node.name,
+                                path: relativePath
+                            }));
+                        }}
                     >
                         <span className="spacer" style={{ width: 14 }}></span>
                         <Icon size={14} />
-                        <span>{node.name}</span>
+                        {isEditing ? (
+                            <input
+                                autoFocus
+                                value={tempName}
+                                onChange={(e) => setTempName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        onRename(node.handle, tempName);
+                                        setEditingPath(null);
+                                    } else if (e.key === 'Escape') {
+                                        setEditingPath(null);
+                                    }
+                                }}
+                                onBlur={() => setEditingPath(null)}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        ) : (
+                            <>
+                                <span style={{ flex: 1 }}>{node.name}</span>
+                                <div className="explorer-actions" onClick={(e) => e.stopPropagation()}>
+                                    <button className="btn-icon small" title="Rename" onClick={() => {
+                                        setEditingPath(path);
+                                        setTempName(node.name);
+                                    }}>
+                                        <Edit2 size={12} />
+                                    </button>
+                                    <button className="btn-icon small" title="Delete" onClick={() => {
+                                        if (window.confirm(`Are you sure you want to delete ${node.name}?`)) {
+                                            onDelete(node.handle);
+                                        }
+                                    }}>
+                                        <Trash2 size={12} />
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 );
             }
@@ -154,9 +202,17 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
         <div className="file-explorer-panel">
             <div className="panel-header">
                 <span className="panel-title">EXPLORER</span>
-                <button className="btn-icon small" title="Open in OS Explorer" onClick={openInExplorer}>
-                    <ExternalLink size={14} />
-                </button>
+                <div className="explorer-actions">
+                    <button className="btn-icon small" title="New File" onClick={() => onCreateFile()}>
+                        <FilePlus size={14} />
+                    </button>
+                    <button className="btn-icon small" title="New Folder" onClick={() => onCreateFolder()}>
+                        <FolderPlus size={14} />
+                    </button>
+                    <button className="btn-icon small" title="Open in OS Explorer" onClick={openInExplorer}>
+                        <ExternalLink size={14} />
+                    </button>
+                </div>
             </div>
             <div className="file-list">
                 {renderTree(files)}

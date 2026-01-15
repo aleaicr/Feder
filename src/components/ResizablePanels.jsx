@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 export function ResizablePanels({ left, center, right }) {
     const [leftWidth, setLeftWidth] = useState(260);
-    const [rightWidth, setRightWidth] = useState(400); // Initial preview width
+    const [rightWidth, setRightWidth] = useState(null); // null means it shares space equally with center
     const containerRef = useRef(null);
+    const rightPanelRef = useRef(null);
 
     const startResizeLeft = (e) => {
         e.preventDefault();
@@ -11,7 +12,8 @@ export function ResizablePanels({ left, center, right }) {
         const startWidth = leftWidth;
 
         const doDrag = (moveEvent) => {
-            setLeftWidth(Math.max(150, Math.min(600, startWidth + moveEvent.clientX - startX)));
+            // Remove max width constraint
+            setLeftWidth(Math.max(100, startWidth + moveEvent.clientX - startX));
         };
 
         const stopDrag = () => {
@@ -29,19 +31,14 @@ export function ResizablePanels({ left, center, right }) {
         e.preventDefault();
         const startX = e.clientX;
 
-        // We resize from the right edge of the CENTER panel? No, the separator is between Center and Right.
-        // If we drag left, rightWidth increases. If we drag right, rightWidth decreases.
-
-        // Actually, usually 3 pane layout: 
-        // [Left] | [Center] | [Right]
-        // Widths: Left=Fixed/Resizable, Center=Flex(1), Right=Fixed/Resizable
-
-        const startWidth = rightWidth;
+        // If rightWidth is null (equal flex), get current pixel width from DOM first
+        const currentWidth = rightWidth !== null ? rightWidth : (rightPanelRef.current ? rightPanelRef.current.offsetWidth : 400);
+        const startWidth = currentWidth;
 
         const doDrag = (moveEvent) => {
-            // Delta X: Moving right (positive) reduces right panel width
             const delta = moveEvent.clientX - startX;
-            setRightWidth(Math.max(200, Math.min(800, startWidth - delta)));
+            // Remove max width constraint
+            setRightWidth(Math.max(100, startWidth - delta));
         };
 
         const stopDrag = () => {
@@ -72,8 +69,8 @@ export function ResizablePanels({ left, center, right }) {
                 </>
             )}
 
-            {/* Center Panel */}
-            <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Center Panel - Always flex: 1 */}
+            <div style={{ flex: 1, minWidth: 100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {center}
             </div>
 
@@ -85,7 +82,17 @@ export function ResizablePanels({ left, center, right }) {
                         onMouseDown={startResizeRight}
                     />
                     {/* Right Panel */}
-                    <div style={{ width: rightWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div
+                        ref={rightPanelRef}
+                        style={{
+                            width: rightWidth === null ? 'auto' : rightWidth,
+                            flex: rightWidth === null ? 1 : 'none',
+                            minWidth: 100,
+                            flexShrink: 0,
+                            display: 'flex',
+                            flexDirection: 'column'
+                        }}
+                    >
                         {right}
                     </div>
                 </>

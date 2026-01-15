@@ -10,6 +10,7 @@
   --text-secondary: #636e72;
   --border-color: #f1f2f6;
   --accent-color: #0984e3;
+  --accent-color-rgb: 9, 132, 227;
   --accent-hover: #74b9ff;
   --toolbar-bg: #ffffff;
   --hover-bg: rgba(0, 0, 0, 0.03);
@@ -26,6 +27,7 @@
   --text-secondary: #8b949e;
   --border-color: #21262d;
   --accent-color: #58a6ff;
+  --accent-color-rgb: 88, 166, 255;
   --accent-hover: #79c0ff;
   --toolbar-bg: #161b22;
   --hover-bg: rgba(255, 255, 255, 0.05);
@@ -160,6 +162,100 @@ body {
 
 .resizer:hover {
   background: var(--accent-color);
+}
+
+.explorer-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.file-tree-item .explorer-actions {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.file-tree-item:hover .explorer-actions {
+  opacity: 1;
+}
+
+.author-entry .remove-author-btn {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.author-entry:hover .remove-author-btn {
+  opacity: 1;
+}
+
+.btn-icon.small {
+  padding: 4px;
+}
+
+.file-tree-item input {
+  background: var(--bg-app);
+  border: 1px solid var(--accent-color);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  width: 100%;
+  outline: none;
+}
+
+/* Switch Style */
+.switch-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--hover-bg);
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked+.slider {
+  background-color: var(--accent-color);
+}
+
+input:checked+.slider:before {
+  transform: translateX(22px);
 }
 
 /* Central Area */
@@ -313,6 +409,17 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 40px;
+}
+
+.preview-content img,
+.preview-content figure {
+  display: block;
+  margin: 2rem auto;
+  max-width: 100%;
+}
+
+.preview-content figure img {
+  margin: 0 auto;
 }
 
 .preview-header {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Moon, Sun, Save, FolderOpen, FilePlus, Download, Sidebar } from 'lucide-react';
+import { Moon, Sun, Save, FolderOpen, FilePlus, Download, Sidebar, Feather, Settings } from 'lucide-react';
 
 export function Layout({
     children,
@@ -7,6 +7,7 @@ export function Layout({
     onSave,
     onNew,
     onExport,
+    onImport,
     isDark,
     toggleTheme,
     filename,
@@ -15,7 +16,8 @@ export function Layout({
     onModeChange,
     onProjectNameChange,
     showExplorer,
-    toggleExplorer
+    toggleExplorer,
+    onLogoClick
 }) {
     return (
         <div className={`app-layout ${isDark ? 'dark' : ''}`}>
@@ -28,7 +30,14 @@ export function Layout({
                     >
                         <Sidebar size={20} />
                     </button>
-                    <h1 className="app-title">Journal Editor</h1>
+                    <div
+                        onClick={onLogoClick}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                        title="Go to Welcome Screen"
+                    >
+                        <Feather size={24} color="var(--accent-color)" />
+                        <h1 className="app-title">Feder</h1>
+                    </div>
 
                     {/* Project Controls */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 20 }}>
@@ -40,22 +49,22 @@ export function Layout({
                                 placeholder="Project Name"
                             />
                         </div>
-                        {mode && onModeChange && (
-                            <div className="header-mode-switch">
-                                <button
-                                    className={`mode-pill ${mode === 'journalist' ? 'active' : ''}`}
-                                    onClick={() => onModeChange('journalist')}
-                                >
-                                    Journal
-                                </button>
-                                <button
-                                    className={`mode-pill ${mode === 'researcher' ? 'active' : ''}`}
-                                    onClick={() => onModeChange('researcher')}
-                                >
-                                    Research
-                                </button>
+                        <div className="header-mode-display">
+                            <div className={`mode-pill active ${mode}-badge`} style={{
+                                cursor: 'default',
+                                padding: '4px 16px',
+                                fontWeight: 800,
+                                fontSize: '0.85rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px'
+                            }}>
+                                {mode === 'journalist' ? 'Writer' :
+                                    mode === 'researcher' ? 'Research' :
+                                        mode === 'engineer' ? 'Engineer' :
+                                            mode === 'scholar' ? 'Scholar' :
+                                                mode === 'scriptwriter' ? 'Script' : mode}
                             </div>
-                        )}
+                        </div>
                         <span className="file-status" style={{ marginLeft: 10, opacity: 0.6 }}>
                             {filename ? `Editing: ${filename}` : ''}
                         </span>
@@ -67,7 +76,10 @@ export function Layout({
                     <ActionButton onClick={onOpen} icon={<FolderOpen size={18} />} label="Open" />
                     <ActionButton onClick={onSave} icon={<Save size={18} />} label="Save" />
                     {mode === 'researcher' && (
-                        <ActionButton onClick={onExport} icon={<Download size={18} />} label="Export" />
+                        <>
+                            <ActionButton onClick={onImport} icon={<Download size={18} style={{ transform: 'rotate(180deg)' }} />} label="Import" />
+                            <ActionButton onClick={onExport} icon={<Download size={18} />} label="Export" />
+                        </>
                     )}
 
                     <div className="divider"></div>

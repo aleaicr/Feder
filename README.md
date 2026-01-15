@@ -1,6 +1,6 @@
-# Journal Editor
+# Feder
 
-A professional, web-based Markdown editor designed for Journalistic and Academic writing. Built with React and Vite.
+A professional, web-based Markdown editor designed for Journalistic and Academic writing. Built with React and Vite. Formerly known as Journal Editor.
 
 ## Features
 

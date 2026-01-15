@@ -84,6 +84,34 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
                     className="main-textarea"
                     placeholder="# Start writing..."
                     spellCheck="false"
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        const data = e.dataTransfer.getData('application/json');
+                        if (data) {
+                            try {
+                                const fileInfo = JSON.parse(data);
+                                const { name, path } = fileInfo;
+                                if (name.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
+                                    insertText(`![${name}](${path})`, '');
+                                } else if (name.endsWith('.md')) {
+                                    insertText(`[${name}](${path})`, '');
+                                } else {
+                                    insertText(path, '');
+                                }
+                            } catch (err) {
+                                console.error('Failed to parse dropped data', err);
+                            }
+                        } else {
+                            const text = e.dataTransfer.getData('text/plain');
+                            if (text) insertText(text, '');
+                        }
+                    }}
                 />
             </div>
         </div>
