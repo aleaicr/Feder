@@ -13,11 +13,13 @@ You asked about hosting this as `aleaicv.github.io/feder` while keeping it in a 
 
 ## 2. Setup GitHub Pages
 
-1. Create a new public repository on GitHub named **`feder`**.
+1. Create a new public repository on GitHub named **`feder`** (or ensure your existing repository is named `feder`).
 2. Push this code to that repository.
 3. Go to your GitHub repository settings.
 4. Click on **Pages** in the left sidebar.
-5. Under **Build and deployment**, select **GitHub Actions** as the source.
+5. Under **Build and deployment**, select **GitHub Actions** as the source (this is **required** for the workflow to work).
+
+**Important**: The repository **must** be public or you need a GitHub Pro/Team plan to use GitHub Pages with private repositories.
 
 ## 3. Deployment
 
@@ -30,16 +32,47 @@ The deployment is automated using GitHub Actions.
 
 Once deployed, access your app at:
 
-> https://aleaicv.github.io/feder/
+> https://aleaicr.github.io/feder/
 
-(This works alongside your existing Jekyll site. Your main site stays at `aleaicv.github.io`, and this app lives comfortably in its own "subdirectory" while being a completely separate repository).
+(This works alongside your existing site. Your main site stays at `aleaicr.github.io`, and this app lives comfortably in its own "subdirectory" while being a completely separate repository).
 
 **Note on Data Privacy**: 
 - The website is a static interface. It does **not** store your files on any server.
 - All files are saved directly to your local computer's folder that you open.
 - The "Last Projects" list is stored in your browser's local cache (IndexedDB) on your specific device.
 
-## 4. Troubleshooting
+## 5. Troubleshooting
 
-- If the page shows a 404, check that the "Deploy to GitHub Pages" action successfully completed.
-- If assets (styles/scripts) are missing, ensure `vite.config.js` has the correct `base: '/feder/'` setting matching your repository name.
+### Common Issues:
+
+1. **404 Page Not Found**
+   - Verify the GitHub Actions workflow completed successfully in the "Actions" tab
+   - Ensure GitHub Pages is enabled and set to "GitHub Actions" as the source in repository Settings > Pages
+   - Wait a few minutes after the first deployment for GitHub Pages to activate
+
+2. **Assets Not Loading (Styles/Scripts Missing)**
+   - Check that `vite.config.js` has `base: '/feder/'` (or your repository name)
+   - Ensure the repository name matches the base path exactly
+   - Clear your browser cache and try again
+
+3. **Workflow Fails**
+   - Check the Actions tab for error details
+   - Ensure you have the correct permissions set in the workflow file
+   - Verify that GitHub Pages is configured to use GitHub Actions as the deployment source
+
+4. **Jekyll Processing Issues**
+   - The workflow now automatically creates a `.nojekyll` file to prevent Jekyll from interfering with the build
+   - If you see issues with files starting with underscores being missing, this should be resolved by the `.nojekyll` file
+
+### How the Workflow Works:
+
+The deployment workflow:
+1. Checks out your code
+2. Sets up Node.js and installs dependencies
+3. Builds the Vite project (`npm run build`)
+4. Creates a `.nojekyll` file to disable Jekyll processing
+5. Configures GitHub Pages
+6. Uploads the `dist` folder as a Pages artifact
+7. Deploys the artifact to GitHub Pages
+
+The `.nojekyll` file is crucial because GitHub Pages uses Jekyll by default, which can skip files and directories that start with underscores, potentially breaking modern JavaScript applications.

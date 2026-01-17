@@ -64,3 +64,14 @@ npm run build
 ```
 
 This will generate the production files in the `dist` folder, which can be deployed to any static site hosting service.
+
+## Deploying to GitHub Pages
+
+This repository includes a GitHub Actions workflow for automated deployment to GitHub Pages. To deploy:
+
+1. Ensure your repository is public (or you have GitHub Pro for private repos)
+2. Go to Settings > Pages in your GitHub repository
+3. Under "Build and deployment", select **GitHub Actions** as the source
+4. Push to the `main` or `master` branch to trigger automatic deployment
+
+For detailed deployment instructions, see [TOWEBSITE.md](TOWEBSITE.md).
