@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import './components/MarkdownSections.css';
 import yaml from 'js-yaml';
 import { Layout } from './components/Layout';
 import { Editor } from './components/Editor';
@@ -13,11 +14,13 @@ import { useFileSystem } from './hooks/useFileSystem';
 import { generateLatex } from './utils/latexExport';
 import { saveProjectHandle, getProjectHandle, saveRecentProject, getRecentProjects, saveSettings, getSettings, saveRecentList } from './utils/db';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { SettingsModal } from './components/SettingsModal';
 
 function App() {
-  const [isDark, setIsDark] = useState(false);
+  const [theme, setTheme] = useState('light'); // 'light' | 'semi-dark' | 'dark'
   const [mode, setMode] = useState('journalist');
   const [content, setContent] = useState(''); // Stores markdown or bib content
+  const [previewContent, setPreviewContent] = useState(''); // Buffered content for preview (updates on save)
   const [metadata, setMetadata] = useState({});
   const [projectMetadata, setProjectMetadata] = useState({ name: 'Untitled Project' });
   const [currentFile, setCurrentFile] = useState({ name: '', kind: 'md', handle: null, src: null });
@@ -29,6 +32,8 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
   const [settings, setSettings] = useState({ name: '', affiliation: '', company: '', profession: '', email: '', phone: '' });
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const {
     fileHandle,
@@ -44,14 +49,21 @@ function App() {
     readFile
   } = useFileSystem();
 
-  // Theme Toggle
+  // Theme Toggle Logic
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    document.documentElement.classList.remove('dark', 'semi-dark');
+    if (theme !== 'light') {
+      document.documentElement.classList.add(theme);
     }
-  }, [isDark]);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      if (prev === 'light') return 'semi-dark';
+      if (prev === 'semi-dark') return 'dark';
+      return 'light';
+    });
+  };
 
   // Load project metadata if dirHandle changes
   // Load project metadata if dirHandle changes
@@ -198,6 +210,7 @@ function App() {
   const parseFileContent = (text, filename) => {
     if (filename.endsWith('.bib') || filename.endsWith('.json') || filename.endsWith('.txt')) {
       setContent(text);
+      setPreviewContent(text);
       setMetadata({}); // clear metadata for these files
       return;
     }
@@ -210,14 +223,17 @@ function App() {
           const body = parts.slice(2).join('---').trim();
           setMetadata(metaConfig || {});
           setContent(body);
+          setPreviewContent(body);
           return;
         }
       }
       setContent(text);
+      setPreviewContent(text);
       setMetadata({});
     } catch (e) {
       console.error('Error parsing frontmatter', e);
       setContent(text);
+      setPreviewContent(text);
     }
   };
 
@@ -309,6 +325,7 @@ function App() {
       setCurrentFile({ name: mdFile.name, kind: 'md', handle: mdFile });
     } else {
       setContent('');
+      setPreviewContent('');
       setMetadata({});
       setCurrentFile({ name: 'Untitled', kind: 'md', handle: null });
     }
@@ -377,6 +394,7 @@ function App() {
 
             await saveRecentProject(dirHandle, projectMetadata.name, mode);
           }
+          setPreviewContent(content);
           setIsDirty(false);
         } else if (!isSilent) {
           // Saving a NEW Research Project - only if NOT silent
@@ -398,16 +416,21 @@ function App() {
           setDirHandle(dir);
           setFileHandle(mdHandle);
           setCurrentFile({ name: mainFileName, kind: 'md', handle: mdHandle });
+          setPreviewContent(content);
           setIsDirty(false);
         }
       } else {
         // Individual file mode
         if (fileHandle) {
           await saveFile(fullContent);
+          setPreviewContent(content);
           setIsDirty(false);
         } else if (!isSilent) {
           const success = await saveFileAs(fullContent);
-          if (success) setIsDirty(false);
+          if (success) {
+            setPreviewContent(content);
+            setIsDirty(false);
+          }
         }
       }
     } catch (err) {
@@ -436,6 +459,7 @@ function App() {
     setDirHandle(null);
     setFileHandle(null);
     setContent('');
+    setPreviewContent('');
     setMetadata({});
     setIsDirty(false);
   };
@@ -469,7 +493,14 @@ function App() {
       await saveRecentProject(projectDir, safeName, newMode);
 
       // 3. Initialize Files
+      // Scholar mode needs access to settings inside createProject if we want to add course default there,
+      // but project_metadata.json is usually simple. But user requested 'course' name there.
+      // Let's assume project name is the default course name.
       const metadata = { name: safeName, mode: newMode };
+      if (newMode === 'scholar') {
+        metadata.course = safeName; // Default course name is project name
+        metadata.university = settings.affiliation || '';
+      }
       await writeFileInDir(projectDir, 'project_metadata.json', JSON.stringify(metadata, null, 2));
 
       let mainFileHandle = null;
@@ -503,25 +534,20 @@ function App() {
             break;
 
           case 'scholar':
-            const course1Dir = await createSubDir(projectDir, 'course 1');
-            await writeFileInDir(course1Dir, 'lecture1.md', `# Lecture 1\n\nNotes...`);
+            const lectureNotesDir = await createSubDir(projectDir, 'Lecture Notes');
+            const assignmentsDir = await createSubDir(projectDir, 'Assignments');
+            const projectsDir = await createSubDir(projectDir, 'Projects');
+            const resourcesDir = await createSubDir(projectDir, 'Resources');
 
-            const course2Dir = await createSubDir(projectDir, 'course 2');
-            await writeFileInDir(course2Dir, 'lecture2.md', `# Lecture 2\n\nNotes...`); // Fixed file name from lecture1.md to lecture2.md based on context
+            const scholarBoilerplate = (lectureName) => `---\ntitle: ${lectureName}\ncourse: ${safeName}\ndate: ${new Date().toLocaleDateString()}\nauthor: ${settings.name || 'Student Name'}\nshowCover: true\nobjectives:\n  - Objective 1\n  - Objective 2\n---\n\n# ${lectureName}\n\n**Date:** ${new Date().toLocaleDateString()}\n\n## Summary\n[Replace this with a brief summary of today's lecture]\n\n## Lecture Notes\n[Write your notes here...]\n\n## Important Definitions\n- **Term 1**: Definition...\n\n## Action Items / Homework\n- [ ] Task 1`;
 
-            const meDir = await createSubDir(projectDir, 'me');
-            const todoHandle = await writeFileInDir(meDir, 'todo.md', `# To Do\n\n- [ ] Task 1`);
+            const lecture1Handle = await writeFileInDir(lectureNotesDir, 'Lecture1.md', scholarBoilerplate('Lecture 1'));
+            await writeFileInDir(lectureNotesDir, 'Lecture2.md', scholarBoilerplate('Lecture 2'));
+            const todoHandle = await writeFileInDir(projectDir, 'TODO.md', `---\ntitle: TO DO List\nauthor: ${settings.name || 'Student Name'}\ndate: ${new Date().toLocaleDateString()}\n---\n\n# TASKS: ${safeName}\n\n## High Priority\n- [ ] \n\n## Upcoming Deadlines\n- [ ] \n\n## Study Plan\n- [ ] `);
+            await writeFileInDir(projectDir, 'syllabus.md', `# Syllabus: ${safeName}\n\n## Course Information\n...\n\n## Schedule\n...`);
 
-            // For nested files, we might need a way to open them easily. 
-            // For now, let's open todo.md or just the root? 
-            // The prompt says "create these folders". It doesn't specify which to open, but logic suggests opening one.
-            // Let's open todo.md for now as it's likely the central hub.
-            mainFileHandle = todoHandle; // This might be tricky if the file handle in state expects direct child? 
-            // setFileHandle checks if it can read? The state just holds the handle.
-            // However, currentFile.name usually expects relative path? 
-            // createProject logic sets currentFile usually as simple name.
-            // Let's stick to a simple default if nested is complex, but the file system hook should handle deep handles.
-            mainFileName = 'me/todo.md';
+            mainFileHandle = lecture1Handle;
+            mainFileName = 'Lecture Notes/Lecture1.md';
             break;
 
           case 'scriptwriter':
@@ -554,7 +580,10 @@ function App() {
       } else {
         // Empty project
         setProjectMetadata(metadata);
+        // Empty project
+        setProjectMetadata(metadata);
         setContent('');
+        setPreviewContent('');
         setMetadata({});
         setCurrentFile({ name: 'Untitled', kind: 'md', handle: null });
       }
@@ -622,6 +651,7 @@ function App() {
         alert('Imported as main_imported.md');
       } else {
         setContent(md);
+        setPreviewContent(md);
         setMetadata({});
         setCurrentFile({ name: importedName, kind: 'md', handle: null });
       }
@@ -678,14 +708,15 @@ function App() {
 
       let src = '';
       if (mode === 'researcher' && dirHandle) {
+        const folderName = projectMetadata.figuresFolder || 'figures';
         let figuresDir;
         try {
-          figuresDir = await dirHandle.getDirectoryHandle('figures', { create: true });
+          figuresDir = await dirHandle.getDirectoryHandle(folderName, { create: true });
         } catch (e) {
           figuresDir = dirHandle;
         }
         await writeFileInDir(figuresDir, file.name, file);
-        src = `figures/${file.name}`;
+        src = `${folderName}/${file.name}`;
       } else {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -735,7 +766,7 @@ function App() {
         revision: 'Rev 0',
         date: new Date().toISOString().split('T')[0]
       };
-    } else if (currentMode === 'researcher' || currentMode === 'scholar') {
+    } else if (currentMode === 'researcher') {
       return {
         authors: [{
           name: settings.name || '',
@@ -744,6 +775,15 @@ function App() {
           email: settings.email || '',
           phone: settings.phone || ''
         }]
+      };
+    } else if (currentMode === 'scholar') {
+      return {
+        title: '',
+        course: projectMetadata.course || projectMetadata.name || '',
+        date: new Date().toLocaleDateString(),
+        author: settings.name || '',
+        showCover: true,
+        objectives: ['']
       };
     } else if (currentMode === 'journalist') {
       return {
@@ -782,6 +822,18 @@ function App() {
     }
   };
 
+  const handleUpdateProjectSettings = async (newMeta) => {
+    setProjectMetadata(newMeta);
+    if (dirHandle) {
+      try {
+        await writeFileInDir(dirHandle, 'project_metadata.json', JSON.stringify(newMeta, null, 2));
+      } catch (e) {
+        console.error('Failed to save settings', e);
+      }
+    }
+  };
+
+
   const handleCreateFolder = async () => {
     if (!dirHandle) return;
     const name = prompt('Folder name:', 'new-folder');
@@ -810,6 +862,7 @@ function App() {
       // If deleted file was open, clear editor
       if (currentFile.handle && currentFile.handle.name === handle.name) {
         setContent('');
+        setPreviewContent('');
         setMetadata({});
         setCurrentFile({ name: '', kind: 'md', handle: null });
         setFileHandle(null);
@@ -863,8 +916,20 @@ function App() {
     </div>
   );
 
+  const handleUpdateFromPreview = useCallback((val) => {
+    setContent(val);
+    setPreviewContent(val);
+  }, []);
+
   const renderRight = () => (
-    <Preview content={content} metadata={metadata} dirHandle={dirHandle} mode={mode} />
+    <Preview
+      content={previewContent}
+      metadata={metadata}
+      dirHandle={dirHandle}
+      mode={mode}
+      onUpdateContent={handleUpdateFromPreview}
+      onUpdateMetadata={setMetadata}
+    />
   );
 
   return (
@@ -885,7 +950,8 @@ function App() {
           }}
           recentProjects={recentProjects}
           onOpenRecent={handleOpenRecent}
-          isDark={isDark}
+          theme={theme}
+          toggleTheme={toggleTheme}
           settings={settings}
           onUpdateSettings={async (newSettings) => {
             setSettings(newSettings);
@@ -895,8 +961,8 @@ function App() {
         />
       ) : (
         <Layout
-          isDark={isDark}
-          toggleTheme={() => setIsDark(!isDark)}
+          theme={theme}
+          toggleTheme={toggleTheme}
           onOpen={handleOpen}
           onSave={handleSave}
           onNew={handleNew}
@@ -909,7 +975,17 @@ function App() {
           showExplorer={showExplorer}
           toggleExplorer={() => setShowExplorer(!showExplorer)}
           onLogoClick={goToWelcome}
+          onOpenSettings={() => setShowSettingsModal(true)}
         >
+          {showSettingsModal && (
+            <SettingsModal
+              mode={mode}
+              metadata={projectMetadata}
+              onUpdate={handleUpdateProjectSettings}
+              onClose={() => setShowSettingsModal(false)}
+            />
+          )}
+
           <div className="workspace-container" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
             {isLoading && (
               <div className="loading-overlay">

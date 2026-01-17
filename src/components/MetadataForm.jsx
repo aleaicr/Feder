@@ -31,6 +31,21 @@ export function MetadataForm({ metadata, onChange, mode }) {
         onChange({ ...metadata, authors: newAuthors });
     };
 
+    const handleObjectiveChange = (index, value) => {
+        const newObjs = [...(metadata.objectives || [])];
+        newObjs[index] = value;
+        onChange({ ...metadata, objectives: newObjs });
+    };
+
+    const addObjective = () => {
+        onChange({ ...metadata, objectives: [...(metadata.objectives || []), ''] });
+    };
+
+    const removeObjective = (index) => {
+        const newObjs = (metadata.objectives || []).filter((_, i) => i !== index);
+        onChange({ ...metadata, objectives: newObjs });
+    };
+
     return (
         <div className="metadata-panel compact">
             <div className="metadata-header" onClick={() => setIsExpanded(!isExpanded)}>
@@ -40,7 +55,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                     <span className="meta-author">
                         {(mode === 'researcher' || mode === 'engineer')
                             ? (metadata.authors ? metadata.authors.map(a => (typeof a === 'string' ? a : a.name)).join(', ') : 'No Authors')
-                            : (metadata.author || 'No Author')
+                            : (mode === 'scholar' ? (metadata.author || 'Student') : (metadata.author || 'No Author'))
                         }
                     </span>
                 </span>
@@ -261,6 +276,21 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                     placeholder={mode === 'engineer' ? "Executive summary of calculations..." : "Abstract..."}
                                 />
                             </div>
+                            <div className="form-group">
+                                <label>References</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 35 }}>
+                                    <label className="switch small">
+                                        <input
+                                            type="checkbox"
+                                            name="showReferences"
+                                            checked={metadata.showReferences ?? false}
+                                            onChange={(e) => onChange({ ...metadata, showReferences: e.target.checked })}
+                                        />
+                                        <span className="slider round"></span>
+                                    </label>
+                                    <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>Append References (APA)</span>
+                                </div>
+                            </div>
                         </>
                     )}
 
@@ -312,6 +342,118 @@ export function MetadataForm({ metadata, onChange, mode }) {
                             </div>
                         </>
                     )}
+
+                    {mode === 'scholar' && (
+                        <>
+                            <div className="form-group full-width">
+                                <label>Course Name</label>
+                                <input
+                                    type="text"
+                                    name="course"
+                                    value={metadata.course || ''}
+                                    onChange={handleChange}
+                                    className="form-input"
+                                    placeholder="e.g. Introduction to Physics"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Student Name</label>
+                                <input
+                                    type="text"
+                                    name="author"
+                                    value={metadata.author || ''}
+                                    onChange={handleChange}
+                                    className="form-input"
+                                    placeholder="Student Name"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Date</label>
+                                <input
+                                    type="text"
+                                    name="date"
+                                    value={metadata.date || ''}
+                                    onChange={handleChange}
+                                    className="form-input"
+                                    placeholder="YYYY-MM-DD"
+                                />
+                            </div>
+                            <div className="form-group full-width">
+                                <label>Lecture Objectives</label>
+                                <div className="authors-list">
+                                    {(metadata.objectives || ['']).map((obj, idx) => (
+                                        <div key={idx} className="author-entry" style={{ marginBottom: 6, display: 'flex', gap: 6 }}>
+                                            <input
+                                                type="text"
+                                                value={obj}
+                                                onChange={(e) => handleObjectiveChange(idx, e.target.value)}
+                                                className="form-input"
+                                                placeholder={`Objective ${idx + 1}`}
+                                                style={{ flex: 1 }}
+                                            />
+                                            <button
+                                                onClick={() => removeObjective(idx)}
+                                                className="btn-icon small remove-author-btn"
+                                                title="Remove Objective"
+                                                style={{ color: 'var(--text-secondary)' }}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button onClick={addObjective} className="text-btn smaller">+ Add Objective</button>
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label>Lecture Materials Cover</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 35 }}>
+                                    <label className="switch small">
+                                        <input
+                                            type="checkbox"
+                                            name="showCover"
+                                            checked={metadata.showCover ?? true}
+                                            onChange={(e) => onChange({ ...metadata, showCover: e.target.checked })}
+                                        />
+                                        <span className="slider round"></span>
+                                    </label>
+                                    <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>Enable Cover</span>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    <div className="form-group full-width">
+                        <label>Accent Color</label>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {[
+                                '#9747ff', // Default Purple
+                                '#ff6b6b', // Red
+                                '#20c997', // Green
+                                '#339af0', // Blue
+                                '#fcc419', // Yellow
+                                '#ff922b', // Orange
+                                '#f06595', // Pink
+                                '#845ef7', // Violet
+                                '#51cf66', // Lime
+                                '#66d9e8'  // Cyan
+                            ].map(color => (
+                                <button
+                                    key={color}
+                                    onClick={() => onChange({ ...metadata, accentColor: color })}
+                                    style={{
+                                        width: 24,
+                                        height: 24,
+                                        borderRadius: '50%',
+                                        background: color,
+                                        border: metadata.accentColor === color ? '2px solid var(--text-primary)' : '2px solid transparent',
+                                        cursor: 'pointer',
+                                        boxShadow: 'var(--shadow-sm)'
+                                    }}
+                                    title={color}
+                                />
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

@@ -44,7 +44,7 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
         try {
             const result = await onUploadImage(); // Expects { alt, src }
             if (result) {
-                insertText(`![${result.alt}](${result.src})`, '');
+                insertText(`![${result.alt}](${result.src}){width=100%}`, '');
             }
         } catch (e) {
             console.error(e);
@@ -67,7 +67,7 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
                 <ToolBtn icon={<Code size={18} />} onClick={() => insertText('`', '`')} title="Inline Code" />
                 <div className="divider"></div>
                 <ToolBtn icon={<Link size={18} />} onClick={() => insertText('[', '](url)')} title="Link" />
-                <ToolBtn icon={<Image size={18} />} onClick={() => insertText('![alt]', '(src)')} title="Image (Text)" />
+                <ToolBtn icon={<Image size={18} />} onClick={() => insertText('![alt]', '(src){width=100%}')} title="Image (Text)" />
                 <ToolBtn icon={<ImagePlus size={18} />} onClick={handleImageUpload} title="Upload Image" />
                 {/* Researcher Mode Tools */}
                 {mode === 'researcher' && (
@@ -98,7 +98,7 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
                                 const fileInfo = JSON.parse(data);
                                 const { name, path } = fileInfo;
                                 if (name.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
-                                    insertText(`![${name}](${path})`, '');
+                                    insertText(`![${name}](${path}){width=100%}`, '');
                                 } else if (name.endsWith('.md')) {
                                     insertText(`[${name}](${path})`, '');
                                 } else {

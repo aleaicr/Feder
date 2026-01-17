@@ -1,61 +1,66 @@
 # Feder
 
-A professional, web-based Markdown editor designed for Journalistic and Academic writing. Built with React and Vite. Formerly known as Journal Editor.
+Feder is a specialized web application designed for scriptwriting and journal editing. Built with React and Vite, it offers a tailored environment for creating and managing structured documents with support for Markdown and mathematical notation.
 
-## Features
+## Prerequisites
 
-### 1. Dual Modes
-*   **Journalist Mode**: A streamlined experience for single-file editing. Perfect for articles, blog posts, and quick notes.
-*   **Researcher Mode**: A project-based workflow. manage complex projects with multiple files (`.md`, `.bib`, `.json`, `.txt`) and assets (images).
-    *   **Project Metadata**: Automatically manages a `project_metadata.json` for your project name and settings.
-    *   **File Explorer**: Integrated sidebar to navigate your project structure.
+Before installing the application, ensure you have the following software installed on your system:
 
-### 2. Intelligent Interface
-*   **Dynamic Layout**: The interface adapts to the content.
-    *   **Markdown**: 3-Panel view (Explorer, Editor, Live Preview).
-    *   **Images**: 2-Panel view (Explorer, Image Viewer).
-    *   **Code/Data (`.json`, `.bib`)**: Focused 2-Panel view (Explorer, Editor).
-*   **Live Preview**: Real-time rendering of Markdown, LaTeX math ($E=mc^2$), and citations.
-*   **Metadata Management**: User-friendly form to edit YAML frontmatter (Title, Author, Abstract, etc.) without touching raw code.
+- **Node.js**: Version 18.0 or higher is recommended.
+- **npm**: Typically included with the Node.js installation.
 
-### 3. Professional Tools
-*   **File Support**: Edit Markdown, BibTeX, JSON, and plain text files. View standard image formats.
-*   **LaTeX Support**: Built-in support for mathematical equations.
-*   **Export**: Export your work to LaTeX (`.tex`) for professional typesetting.
-*   **Dark Mode**: easy-on-the-eyes dark theme for late-night writing.
+## Installation
 
-## Getting Started
+To set up the project locally, follow these steps:
 
-### Prerequisites
-*   A modern web browser (Chrome, Edge, Firefox) supporting the **File System Access API**.
+1.  **Clone the repository**
+    
+    Open your terminal and run the following command to download the source code:
+    ```bash
+    git clone https://github.com/CodexFabrica/Feder.git
+    ```
 
-### Installation & Running
-1.  **Clone/Download** the repository.
-2.  **Install Dependencies** (if developing):
+2.  **Navigate to the project directory**
+
+    ```bash
+    cd Feder
+    ```
+
+3.  **Install dependencies**
+
+    Run the installation command to download all required packages:
     ```bash
     npm install
     ```
-3.  **Run the Application**:
-    *   **Standard User**: Double-click `Abrir Editor.bat`.
-    *   **Developer**: Run `npm run dev`.
 
-### Usage Guide
-1.  **Opening a Project**:
-    *   Click the **Folder Icon** (Open).
-    *   In **Journalist Mode**, select a single file.
-    *   In **Researcher Mode**, select a directory (folder) to open as a project.
-2.  **Creating New Files**:
-    *   Click **New** to clear the current buffer.
-    *   In Researcher Mode, use the Explorer context (not yet implemented) or just save a new file to add it to the project.
-3.  **Saving**:
-    *   Press `Ctrl + S` or click the **Save Icon**.
-    *   First-time saves will prompt for a location (Journalist Mode) or save directly to the project (Researcher Mode).
+## Usage
 
-## Technical Details
-This application is a **Progressive Web App (PWA)** candidate built with:
-*   **React 19**: Frontend framework.
-*   **Vite**: Build tool and dev server.
-*   **File System Access API**: For direct disk interactions (reading/writing files).
-*   **Tailwind CSS (Concept)**: Custom CSS variables for theming.
+You can run the application using either the command line or the provided Windows shortcut.
 
-**Note**: The application runs entirely in your browser. No data is sent to any server.
+### Option 1: Command Line (Cross-Platform)
+
+To start the development server manually, execute:
+
+```bash
+npm run dev
+```
+
+Once the server is running, you can access the application in your browser, typically at `http://localhost:5173`.
+
+### Option 2: Windows Launcher
+
+For Windows users, the repository includes a convenience script. Simply double-click the `Feder.bat` file in the root directory. This script will automatically:
+1.  Start the development server.
+2.  Open the application in your default web browser.
+
+Is recommended to create a direct access of `Feder.bat`.
+
+## Building for Production
+
+To create an optimized build for deployment, run the following command:
+
+```bash
+npm run build
+```
+
+This will generate the production files in the `dist` folder, which can be deployed to any static site hosting service.

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Moon, Sun, Save, FolderOpen, FilePlus, Download, Sidebar, Feather, Settings } from 'lucide-react';
+import { Moon, Sun, Save, FolderOpen, FilePlus, Download, Sidebar, Feather, Settings, SunMoon } from 'lucide-react';
 
 export function Layout({
     children,
@@ -8,7 +8,8 @@ export function Layout({
     onNew,
     onExport,
     onImport,
-    isDark,
+    isDark, // Kept for potential internal use but deprecated
+    theme,
     toggleTheme,
     filename,
     projectName,
@@ -17,10 +18,11 @@ export function Layout({
     onProjectNameChange,
     showExplorer,
     toggleExplorer,
-    onLogoClick
+    onLogoClick,
+    onOpenSettings
 }) {
     return (
-        <div className={`app-layout ${isDark ? 'dark' : ''}`}>
+        <div className={`app-layout ${theme !== 'light' ? theme : ''}`}>
             <header className="app-header">
                 <div className="title-group">
                     <button
@@ -79,13 +81,16 @@ export function Layout({
                         <>
                             <ActionButton onClick={onImport} icon={<Download size={18} style={{ transform: 'rotate(180deg)' }} />} label="Import" />
                             <ActionButton onClick={onExport} icon={<Download size={18} />} label="Export" />
+                            <div className="divider"></div>
+                            <ActionButton onClick={onOpenSettings} icon={<Settings size={18} />} label="Decisions" />
                         </>
                     )}
 
                     <div className="divider"></div>
 
-                    <button onClick={toggleTheme} className="btn-icon">
-                        {isDark ? <Sun size={20} /> : <Moon size={20} />}
+                    <button onClick={toggleTheme} className="btn-icon" title={`Current Theme: ${theme}`}>
+                        {theme === 'light' ? <Moon size={20} /> :
+                            theme === 'semi-dark' ? <SunMoon size={20} /> : <Sun size={20} />}
                     </button>
                 </div>
             </header>

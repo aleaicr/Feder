@@ -90,7 +90,22 @@
     background: var(--bg-hover);
 }
 
-/* Research Paper Preview Mode */
+/* Preview Panel Base */
+.panel-preview {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    background-color: var(--bg-app);
+    min-width: 400px; /* Comfortable minimum */
+}
+
+.preview-content {
+    width: 100%;
+    margin: 0 auto;
+}
+
 .panel-preview.research-mode {
     background-color: white;
     /* Often preferable for reading layout */
@@ -545,7 +560,146 @@
 }
 
 .scholar-badge {
-    background: rgba(151, 71, 255, 0.1) !important;
-    border: 1px solid #9747ff !important;
-    color: #9747ff !important;
+    background: rgba(var(--scholar-accent-rgb, 151, 71, 255), 0.1) !important;
+    border: 1px solid var(--scholar-accent, #9747ff) !important;
+    color: var(--scholar-accent, #9747ff) !important;
+}
+
+/* Scholar Mode Styles */
+.panel-preview.scholar-mode {
+    background-color: #fcfcfc;
+    color: #2c3e50;
+}
+
+.dark .panel-preview.scholar-mode {
+    background-color: #1a1c1e;
+    color: #e2e2e2;
+}
+
+.preview-content.scholar-lecture-layout {
+    font-family: 'Outfit', 'Inter', sans-serif;
+    padding: 0.8in;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.scholar-cover-page {
+    border-left: 8px solid var(--scholar-accent, #9747ff);
+    padding: 4rem 3rem;
+    margin-bottom: 4rem;
+    background: rgba(var(--scholar-accent-rgb, 151, 71, 255), 0.03);
+    border-radius: 0 16px 16px 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.dark .scholar-cover-page {
+    background: rgba(var(--scholar-accent-rgb, 151, 71, 255), 0.08);
+}
+
+.scholar-course-tag {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--scholar-accent, #9747ff);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 1rem;
+}
+
+.scholar-lecture-title {
+    font-size: 3rem;
+    font-weight: 900;
+    margin: 1rem 0 3rem 0;
+    line-height: 1.1;
+    color: var(--text-primary);
+}
+
+.scholar-meta-info {
+    display: flex;
+    gap: 4rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 2rem;
+}
+
+.scholar-meta-info .meta-item .label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.scholar-meta-info .meta-item .value {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* Scholar TODO Styles */
+.scholar-lecture-layout ul.contains-task-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.scholar-lecture-layout li.task-list-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 0.8rem;
+    padding: 0.5rem;
+    background: var(--bg-app);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.scholar-lecture-layout li.task-list-item:hover {
+    background: var(--bg-hover);
+    transform: translateX(2px);
+}
+
+.scholar-lecture-layout input[type="checkbox"] {
+    margin-right: 10px;
+    margin-top: 4px;
+    cursor: pointer;
+    accent-color: var(--scholar-accent, #9747ff);
+    width: 1.1em;
+    height: 1.1em;
+}
+
+/* Scholar Objectives Custom Style */
+.scholar-objectives-preview {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px dashed var(--border-color);
+}
+
+.scholar-objectives-preview .checklist-item {
+    padding: 8px 12px;
+    background: var(--bg-app);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: transform 0.2s;
+}
+
+.scholar-objectives-preview .checklist-item:hover {
+    transform: translateX(4px);
+    border-color: var(--scholar-accent, #9747ff);
+}
+
+/* Math Equation Centering */
+.katex-display {
+    display: block;
+    text-align: center;
+    margin: 1.5rem 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.katex-display>.katex {
+    text-align: center;
+    display: inline-block;
+}
+
+/* Ensure inline math doesn't break layout */
+.katex {
+    font-size: 1.05em;
 }

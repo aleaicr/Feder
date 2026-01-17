@@ -33,6 +33,19 @@
   --hover-bg: rgba(255, 255, 255, 0.05);
 }
 
+.semi-dark {
+  /* Colors - Semi Dark (Twilight) */
+  --bg-app: #cfd8dc;
+  --bg-panel: #eceff1;
+  --text-primary: #263238;
+  --text-secondary: #546e7a;
+  --border-color: #b0bec5;
+  --accent-color: #1976d2;
+  --accent-hover: #1e88e5;
+  --toolbar-bg: #eceff1;
+  --hover-bg: rgba(0, 0, 0, 0.05);
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);

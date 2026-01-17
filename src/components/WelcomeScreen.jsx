@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { FolderOpen, FilePlus, BookOpen, PenTool, Feather, Settings, X } from 'lucide-react';
+import { FolderOpen, FilePlus, BookOpen, PenTool, Feather, Settings, X, Sun, Moon, SunMoon } from 'lucide-react';
 
-export function WelcomeScreen({ onNewProject, onOpenProject, recentProjects, onOpenRecent, isDark, settings, onUpdateSettings, onRemoveRecent }) {
+export function WelcomeScreen({ onNewProject, onOpenProject, recentProjects, onOpenRecent, theme, toggleTheme, settings, onUpdateSettings, onRemoveRecent }) {
     const [newItemName, setNewItemName] = useState('');
     const [newItemMode, setNewItemMode] = useState('journalist');
     const [useTemplate, setUseTemplate] = useState(true);
@@ -49,7 +49,7 @@ export function WelcomeScreen({ onNewProject, onOpenProject, recentProjects, onO
                         />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <label style={miniLabelStyle}>AFFILIATION</label>
+                        <label style={miniLabelStyle}>AFFILIATION / UNIVERSITY</label>
                         <input
                             style={miniInputStyle}
                             value={settings.affiliation || ''}
@@ -104,8 +104,28 @@ export function WelcomeScreen({ onNewProject, onOpenProject, recentProjects, onO
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: 40,
-                overflowY: 'auto'
+                padding: 40,
+                overflowY: 'auto',
+                position: 'relative'
             }}>
+                <button
+                    onClick={toggleTheme}
+                    style={{
+                        position: 'absolute',
+                        top: 20,
+                        right: 20,
+                        padding: 10,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-secondary)'
+                    }}
+                    title={theme === 'light' ? "Switch to Semi-Dark Mode" :
+                        theme === 'semi-dark' ? "Switch to Dark Mode" : "Switch to Light Mode"}
+                >
+                    {theme === 'light' ? <SunMoon size={24} /> :
+                        theme === 'semi-dark' ? <Moon size={24} /> : <Sun size={24} />}
+                </button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 40, marginTop: '5vh' }}>
                     <Feather size={56} color="var(--accent-color)" />
                     <h1 style={{ fontSize: '4rem', margin: 0, fontWeight: 800, letterSpacing: '-1px' }}>Feder</h1>
@@ -260,8 +280,16 @@ export function WelcomeScreen({ onNewProject, onOpenProject, recentProjects, onO
                                 <button
                                     onClick={() => onNewProject(newItemName, newItemMode, useTemplate)}
                                     className="btn-primary"
-                                    style={{ ...btnPrimaryStyle, width: 'auto', padding: '12px 30px', marginTop: 0 }}
+                                    style={{
+                                        ...btnPrimaryStyle,
+                                        width: 'auto',
+                                        padding: '12px 30px',
+                                        marginTop: 0,
+                                        opacity: newItemName.trim() ? 1 : 0.5,
+                                        cursor: newItemName.trim() ? 'pointer' : 'not-allowed'
+                                    }}
                                     disabled={!newItemName.trim()}
+                                    title={!newItemName.trim() ? "Write a project name first" : ""}
                                 >
                                     Create & Save Project
                                 </button>
@@ -306,7 +334,8 @@ const cardStyle = {
 const cardTitleStyle = {
     margin: 0,
     fontSize: '1.1rem',
-    fontWeight: 700
+    fontWeight: 700,
+    color: 'var(--text-primary)'
 };
 
 const cardDescStyle = {
@@ -361,7 +390,8 @@ const modeBtnStyle = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    transition: 'all 0.2s'
+    transition: 'all 0.2s',
+    outline: 'none'
 };
 
 const activeModeStyle = {
@@ -376,6 +406,7 @@ const recentItemStyle = {
     alignItems: 'center',
     padding: '10px',
     background: 'var(--bg-app)',
+    color: 'var(--text-primary)',
     border: '1px solid var(--border-color)',
     borderRadius: 6,
     cursor: 'pointer',

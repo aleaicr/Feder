@@ -2,18 +2,34 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 export function ResizablePanels({ left, center, right }) {
     const [leftWidth, setLeftWidth] = useState(260);
-    const [rightWidth, setRightWidth] = useState(null); // null means it shares space equally with center
+    const [rightWidth, setRightWidth] = useState(window.innerWidth * 0.45);
     const containerRef = useRef(null);
     const rightPanelRef = useRef(null);
+
+    const rightWidthRef = useRef(rightWidth);
+    const leftWidthRef = useRef(leftWidth);
+
+    useEffect(() => { rightWidthRef.current = rightWidth; }, [rightWidth]);
+    useEffect(() => { leftWidthRef.current = leftWidth; }, [leftWidth]);
+
+    const MIN_PANEL_WIDTH = 100;
 
     const startResizeLeft = (e) => {
         e.preventDefault();
         const startX = e.clientX;
         const startWidth = leftWidth;
+        const totalWidth = containerRef.current.offsetWidth;
 
         const doDrag = (moveEvent) => {
-            // Remove max width constraint
-            setLeftWidth(Math.max(100, startWidth + moveEvent.clientX - startX));
+            const delta = moveEvent.clientX - startX;
+            let newWidth = startWidth + delta;
+
+            // Maximum width: Total - (Center min 100) - (Right width if present)
+            const rw = right ? rightWidthRef.current : 0;
+            const maxWidth = totalWidth - MIN_PANEL_WIDTH - (right ? rw : 0);
+
+            newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(newWidth, maxWidth));
+            setLeftWidth(newWidth);
         };
 
         const stopDrag = () => {
@@ -30,15 +46,19 @@ export function ResizablePanels({ left, center, right }) {
     const startResizeRight = (e) => {
         e.preventDefault();
         const startX = e.clientX;
-
-        // If rightWidth is null (equal flex), get current pixel width from DOM first
-        const currentWidth = rightWidth !== null ? rightWidth : (rightPanelRef.current ? rightPanelRef.current.offsetWidth : 400);
-        const startWidth = currentWidth;
+        const startWidth = rightWidth;
+        const totalWidth = containerRef.current.offsetWidth;
 
         const doDrag = (moveEvent) => {
             const delta = moveEvent.clientX - startX;
-            // Remove max width constraint
-            setRightWidth(Math.max(100, startWidth - delta));
+            let newWidth = startWidth - delta;
+
+            // Maximum width: Total - (Center min 100) - (Left width if present)
+            const lw = left ? leftWidthRef.current : 0;
+            const maxWidth = totalWidth - MIN_PANEL_WIDTH - (left ? lw : 0);
+
+            newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(newWidth, maxWidth));
+            setRightWidth(newWidth);
         };
 
         const stopDrag = () => {
@@ -58,7 +78,7 @@ export function ResizablePanels({ left, center, right }) {
             {/* Left Panel */}
             {left && (
                 <>
-                    <div style={{ width: leftWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ width: leftWidth, minWidth: 100, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
                         {left}
                     </div>
                     {/* Resizer 1 */}
@@ -85,8 +105,8 @@ export function ResizablePanels({ left, center, right }) {
                     <div
                         ref={rightPanelRef}
                         style={{
-                            width: rightWidth === null ? 'auto' : rightWidth,
-                            flex: rightWidth === null ? 1 : 'none',
+                            width: rightWidth,
+                            flex: 'none',
                             minWidth: 100,
                             flexShrink: 0,
                             display: 'flex',
