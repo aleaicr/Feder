@@ -9,6 +9,14 @@ export function MetadataForm({ metadata, onChange, mode }) {
         onChange({ ...metadata, [name]: value });
     };
 
+    // Helper to safely render values or pass to inputs
+    const safeStr = (val) => {
+        if (val === null || val === undefined) return '';
+        if (val instanceof Date) return val.toLocaleDateString();
+        if (typeof val === 'object') return JSON.stringify(val);
+        return String(val);
+    };
+
     const handleAuthorChange = (index, field, value) => {
         const newAuthors = [...(metadata.authors || [])];
         if (!newAuthors[index]) newAuthors[index] = {};
@@ -50,12 +58,12 @@ export function MetadataForm({ metadata, onChange, mode }) {
         <div className="metadata-panel compact">
             <div className="metadata-header" onClick={() => setIsExpanded(!isExpanded)}>
                 <span className="meta-summary">
-                    <strong>{metadata.title || 'Untitled'}</strong>
+                    <strong>{safeStr(metadata.title) || 'Untitled'}</strong>
                     <span className="meta-pipe"> | </span>
                     <span className="meta-author">
                         {(mode === 'researcher' || mode === 'engineer')
                             ? (metadata.authors ? metadata.authors.map(a => (typeof a === 'string' ? a : a.name)).join(', ') : 'No Authors')
-                            : (mode === 'scholar' ? (metadata.author || 'Student') : (metadata.author || 'No Author'))
+                            : (mode === 'scholar' ? safeStr(metadata.author || 'Student') : safeStr(metadata.author || 'No Author'))
                         }
                     </span>
                 </span>
@@ -71,7 +79,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                         <input
                             type="text"
                             name="title"
-                            value={metadata.title || ''}
+                            value={safeStr(metadata.title)}
                             onChange={handleChange}
                             className="form-input"
                             placeholder="Document Title"
@@ -85,7 +93,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                 <input
                                     type="text"
                                     name="subtitle"
-                                    value={metadata.subtitle || ''}
+                                    value={safeStr(metadata.subtitle)}
                                     onChange={handleChange}
                                     className="form-input"
                                     placeholder="Subtitle"
@@ -118,7 +126,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                 <input
                                     type="text"
                                     name="date"
-                                    value={metadata.date || ''}
+                                    value={safeStr(metadata.date)}
                                     onChange={handleChange}
                                     className="form-input"
                                     placeholder="YYYY-MM-DD"
@@ -208,7 +216,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                         <input
                                             type="text"
                                             name="date"
-                                            value={metadata.date || ''}
+                                            value={safeStr(metadata.date)}
                                             onChange={handleChange}
                                             className="form-input"
                                             placeholder="YYYY-MM-DD"
@@ -269,7 +277,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                 <label>{mode === 'engineer' ? 'Summary' : 'Abstract'}</label>
                                 <textarea
                                     name="abstract"
-                                    value={metadata.abstract || ''}
+                                    value={safeStr(metadata.abstract)}
                                     onChange={handleChange}
                                     rows={2}
                                     className="form-input"
@@ -301,7 +309,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                 <input
                                     type="text"
                                     name="author"
-                                    value={metadata.author || ''}
+                                    value={safeStr(metadata.author)}
                                     onChange={handleChange}
                                     className="form-input"
                                     placeholder="Writer Name"
@@ -323,7 +331,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                 <input
                                     type="text"
                                     name="date"
-                                    value={metadata.date || ''}
+                                    value={safeStr(metadata.date)}
                                     onChange={handleChange}
                                     className="form-input"
                                     placeholder="Draft Date"
@@ -372,7 +380,7 @@ export function MetadataForm({ metadata, onChange, mode }) {
                                 <input
                                     type="text"
                                     name="date"
-                                    value={metadata.date || ''}
+                                    value={safeStr(metadata.date)}
                                     onChange={handleChange}
                                     className="form-input"
                                     placeholder="YYYY-MM-DD"

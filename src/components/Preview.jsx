@@ -157,7 +157,7 @@ const ReferenceList = ({ bibData, citedKeys }) => {
     );
 };
 
-const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, activeAccentColor, fullContent, metadata }) => {
+const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, activeAccentColor, fullContent, metadata, projectMetadata }) => {
     const [isOpen, setIsOpen] = useState(true);
 
     const processedContent = React.useMemo(() => {
@@ -166,7 +166,7 @@ const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, a
 
     // Custom components with offset-aware checkbox logic
     const components = {
-        img: ({ node, ...props }) => <AsyncImage {...props} dirHandle={dirHandle} metadata={metadata} />,
+        img: ({ node, ...props }) => <AsyncImage {...props} dirHandle={dirHandle} metadata={metadata} projectMetadata={projectMetadata} />,
 
         input: ({ node, ...props }) => {
             if (props.type === 'checkbox') {
@@ -270,7 +270,7 @@ const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, a
     );
 };
 
-function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent, onUpdateMetadata }) {
+function PreviewComponent({ content, metadata, projectMetadata, dirHandle, mode, onUpdateContent, onUpdateMetadata }) {
     const [coverOpen, setCoverOpen] = useState(true);
     const [tocOpen, setTocOpen] = useState(true);
 
@@ -286,10 +286,11 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
         displayAuthors = typeof author === 'object' ? (author.name || JSON.stringify(author)) : author;
     }
 
-    const isResearch = mode === 'researcher' || mode === 'scholar';
+    const isResearch = mode === 'researcher';
     const isEngineer = mode === 'engineer';
     const isScript = mode === 'scriptwriter';
     const isScholar = mode === 'scholar';
+    const isJournalist = mode === 'journalist';
 
     // Parse headers for Table of Contents
     const parseHeaders = (md) => {
@@ -333,7 +334,14 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
         renderedAuthors = displayAuthors && <div className="preview-authors">By {displayAuthors}</div>;
     }
 
-    // Helper to safely render dates
+    // Helper to safely render values as children (prevents crash on Date objects)
+    const safeRender = (val) => {
+        if (val === null || val === undefined) return '';
+        if (val instanceof Date) return val.toLocaleDateString();
+        if (typeof val === 'object' && !Array.isArray(val)) return JSON.stringify(val);
+        return val;
+    };
+
     const safeDate = (val) => {
         if (!val) return null;
         if (val instanceof Date) return val.toLocaleDateString();
@@ -377,7 +385,9 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
         const loadBib = async () => {
             if (!dirHandle) return;
             try {
-                const fileHandle = await dirHandle.getFileHandle('references.bib');
+                // Use project setting or default
+                const bibFile = projectMetadata?.bibFile || 'references.bib';
+                const fileHandle = await dirHandle.getFileHandle(bibFile);
                 const file = await fileHandle.getFile();
                 const text = await file.text();
                 setBibData(parseBibTex(text));
@@ -387,7 +397,7 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
             }
         };
         loadBib();
-    }, [dirHandle]);
+    }, [dirHandle, projectMetadata?.bibFile]);
 
     // Process citations in content
     // Replace [@Key] with APA citation
@@ -410,13 +420,13 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
 
     return (
         <div
-            className={`panel-preview ${isResearch ? 'research-mode' : ''} ${isEngineer ? 'engineer-mode' : ''} ${isScript ? 'script-mode' : ''} ${isScholar ? 'scholar-mode' : ''}`}
+            className={`panel-preview ${isResearch ? 'research-mode' : ''} ${isEngineer ? 'engineer-mode' : ''} ${isScript ? 'script-mode' : ''} ${isScholar ? 'scholar-mode' : ''} ${isJournalist ? 'journalist-mode' : ''}`}
             style={{
                 '--scholar-accent': activeAccentColor,
                 '--scholar-accent-rgb': hexToRgb(activeAccentColor)
             }}
         >
-            <div className={`preview-content ${isResearch ? 'paper-layout' : ''} ${isEngineer ? 'eng-report-layout' : ''} ${isScript ? 'script-layout' : ''} ${isScholar ? 'scholar-lecture-layout' : ''}`}>
+            <div className={`preview-content ${isResearch ? 'paper-layout' : ''} ${isEngineer ? 'eng-report-layout' : ''} ${isScript ? 'script-layout' : ''} ${isScholar ? 'scholar-lecture-layout' : ''} ${isJournalist ? 'journal-layout' : ''}`}>
 
                 {/* Engineer Cover Page */}
                 {isEngineer && (
@@ -574,6 +584,33 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
                     </div>
                 )}
 
+                {/* Journalist Cover/Header */}
+                {isJournalist && (
+                    <div className={`collapsible-section ${coverOpen ? 'open' : ''}`}>
+                        <div className="section-header" onClick={() => setCoverOpen(!coverOpen)}>
+                            {coverOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <span>PRESS HEADER</span>
+                        </div>
+                        {coverOpen && (
+                            <header className="journal-header">
+                                <div className="journal-meta-top">
+                                    <span className="journal-dateline">{date ? safeDate(date) : new Date().toLocaleDateString()}</span>
+                                    <span className="journal-category">PRESS RELEASE / NEWS</span>
+                                </div>
+                                <h1 className="journal-title">{safeRender(title) || 'UNTITLED ARTICLE'}</h1>
+                                {subtitle && <p className="journal-subtitle">{safeRender(subtitle)}</p>}
+                                <div className="journal-byline">
+                                    <div className="byline-info">
+                                        <span className="by">By </span>
+                                        <span className="journalist-name">{displayAuthors || 'Anonymous'}</span>
+                                        {profession && <span className="journalist-profession">, {safeRender(profession)}</span>}
+                                    </div>
+                                </div>
+                            </header>
+                        )}
+                    </div>
+                )}
+
                 {/* Table of Contents (Engineer Mode) */}
                 {isEngineer && showToC !== false && toc.length > 0 && (
                     <div className={`collapsible-section ${tocOpen ? 'open' : ''}`} style={{ marginTop: coverOpen ? 0 : 20 }}>
@@ -612,17 +649,17 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
                     </div>
                 )}
 
-                {!isEngineer && !isScript && !isScholar && (title || displayAuthors || abstract || subtitle) && (
+                {!isEngineer && !isScript && !isScholar && !isJournalist && (title || displayAuthors || abstract || subtitle) && (
                     <header className="preview-header">
-                        {title && <h1 className={`preview-title ${isResearch ? 'paper-title' : ''}`}>{title}</h1>}
-                        {subtitle && <p className="preview-subtitle">{subtitle}</p>}
+                        {title && <h1 className={`preview-title ${isResearch ? 'paper-title' : ''}`}>{safeRender(title)}</h1>}
+                        {subtitle && <p className="preview-subtitle">{safeRender(subtitle)}</p>}
                         {renderedAuthors}
-                        {profession && <div className="preview-profession">{profession}</div>}
-                        {date && <div className="preview-date">{date}</div>}
+                        {profession && <div className="preview-profession">{safeRender(profession)}</div>}
+                        {date && <div className="preview-date">{safeDate(date)}</div>}
                         {abstract && (
                             <div className="preview-abstract">
                                 <span className="preview-abstract-label">Abstract</span>
-                                {abstract}
+                                {safeRender(abstract)}
                             </div>
                         )}
                     </header>
@@ -640,11 +677,12 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
                             activeAccentColor={activeAccentColor}
                             fullContent={content}
                             metadata={metadata}
+                            projectMetadata={projectMetadata}
                         />
                     ))}
 
                     {/* References Section */}
-                    {metadata?.showReferences && (
+                    {metadata?.showReferences && !isJournalist && (
                         <ReferenceList bibData={bibData} citedKeys={citedKeys} />
                     )}
                 </div>
@@ -655,7 +693,7 @@ function PreviewComponent({ content, metadata, dirHandle, mode, onUpdateContent,
 
 export const Preview = React.memo(PreviewComponent);
 
-function AsyncImage({ src, alt, dirHandle, metadata }) {
+function AsyncImage({ src, alt, dirHandle, metadata, projectMetadata }) {
     const [imgSrc, setImgSrc] = useState(src);
 
     // Extract width if present in alt text (from pipe syntax)
@@ -667,8 +705,8 @@ function AsyncImage({ src, alt, dirHandle, metadata }) {
         width = parts[1];
     }
 
-    // Caption Alignment from metadata
-    const captionAlign = metadata && metadata.captionAlignment ? metadata.captionAlignment : 'center';
+    // Caption Alignment: check metadata (file frontmatter) first, then projectMetadata
+    const captionAlign = (metadata && metadata.captionAlignment) || (projectMetadata && projectMetadata.captionAlignment) || 'center';
 
     useEffect(() => {
         let objectUrl;

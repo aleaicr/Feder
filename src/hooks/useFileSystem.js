@@ -69,11 +69,22 @@ export function useFileSystem() {
     // Directory handling for Researcher Mode
     const openDirectory = useCallback(async () => {
         try {
-            const handle = await window.showDirectoryPicker();
-            setDirHandle(handle);
-            // Try to find index.md or main.md, or just leave it to user to select?
-            // For now, return the handle so UI can decide.
-            return handle;
+            if (window.electronAPI && window.electronAPI.isElectron) {
+                const path = await window.electronAPI.openDirectory();
+                if (path) {
+                    const { getElectronHandle } = await import('../utils/electronFileSystem');
+                    const handle = getElectronHandle(path);
+                    setDirHandle(handle);
+                    return handle;
+                }
+                return null;
+            } else {
+                const handle = await window.showDirectoryPicker();
+                setDirHandle(handle);
+                // Try to find index.md or main.md, or just leave it to user to select?
+                // For now, return the handle so UI can decide.
+                return handle;
+            }
         } catch (err) {
             if (err.name !== 'AbortError') console.error(err);
             return null;

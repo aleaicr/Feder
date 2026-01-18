@@ -79,18 +79,17 @@ export function Layout({
                     <ActionButton onClick={onSave} icon={<Save size={18} />} label="Save" />
                     {mode === 'researcher' && (
                         <>
-                            <ActionButton onClick={onImport} icon={<Download size={18} style={{ transform: 'rotate(180deg)' }} />} label="Import" />
                             <ActionButton onClick={onExport} icon={<Download size={18} />} label="Export" />
                             <div className="divider"></div>
-                            <ActionButton onClick={onOpenSettings} icon={<Settings size={18} />} label="Decisions" />
                         </>
                     )}
+                    <ActionButton onClick={onOpenSettings} icon={<Settings size={18} />} label="Settings" />
 
                     <div className="divider"></div>
 
-                    <button onClick={toggleTheme} className="btn-icon" title={`Current Theme: ${theme}`}>
-                        {theme === 'light' ? <Moon size={20} /> :
-                            theme === 'semi-dark' ? <SunMoon size={20} /> : <Sun size={20} />}
+                    <button onClick={toggleTheme} className="btn-icon" title={`Theme: ${theme}`}>
+                        {theme === 'light' ? <Sun size={20} /> :
+                            theme === 'dark' ? <Moon size={20} /> : <SunMoon size={20} />}
                     </button>
                 </div>
             </header>

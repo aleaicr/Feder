@@ -16,6 +16,8 @@ import { saveProjectHandle, getProjectHandle, saveRecentProject, getRecentProjec
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { SettingsModal } from './components/SettingsModal';
 
+const isElectron = /Electron/i.test(navigator.userAgent);
+
 function App() {
   const [theme, setTheme] = useState('light'); // 'light' | 'semi-dark' | 'dark'
   const [mode, setMode] = useState('journalist');
@@ -51,15 +53,25 @@ function App() {
 
   // Theme Toggle Logic
   useEffect(() => {
-    document.documentElement.classList.remove('dark', 'semi-dark');
+    document.documentElement.classList.remove('dark', 'semi-dark', 'semi-light');
     if (theme !== 'light') {
       document.documentElement.classList.add(theme);
     }
   }, [theme]);
 
+  // Desktop detection
+  useEffect(() => {
+    if (isElectron) {
+      document.body.classList.add('is-desktop');
+    } else {
+      document.body.classList.remove('is-desktop');
+    }
+  }, []);
+
   const toggleTheme = () => {
     setTheme(prev => {
-      if (prev === 'light') return 'semi-dark';
+      if (prev === 'light') return 'semi-light';
+      if (prev === 'semi-light') return 'semi-dark';
       if (prev === 'semi-dark') return 'dark';
       return 'light';
     });
@@ -111,8 +123,24 @@ function App() {
   }, []);
 
   const handleOpenRecent = async (project) => {
-    if (!project || !project.handle) {
-      alert('Selected project data is corrupted.');
+    if (!project) return;
+
+    // Normalize Project Object
+    // If we have a path (Electron) but no valid handle (after restart in IDB), fix it.
+    let activeHandle = project.handle;
+
+    if (window.electronAPI && window.electronAPI.isElectron && project.path) {
+      // Reconstruct handle from path
+      try {
+        const { getElectronHandle } = await import('./utils/electronFileSystem');
+        activeHandle = getElectronHandle(project.path, project.name);
+      } catch (e) {
+        console.error('Failed to restore Electron handle', e);
+      }
+    }
+
+    if (!activeHandle) {
+      alert('Selected project data is missing.');
       return;
     }
 
@@ -121,24 +149,28 @@ function App() {
 
     setIsLoading(true);
     try {
-      // Verify permission
-      let permission = await project.handle.queryPermission({ mode: 'readwrite' });
-
-      if (permission !== 'granted') {
-        permission = await project.handle.requestPermission({ mode: 'readwrite' });
+      // Verify permission (only if it's a standard web handle)
+      if (!activeHandle.path && activeHandle.queryPermission) {
+        let permission = await activeHandle.queryPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') {
+          permission = await activeHandle.requestPermission({ mode: 'readwrite' });
+        }
+        if (permission !== 'granted') {
+          const reOpen = window.confirm(`Permission to access '${project.name}' was denied. Would you like to locate the folder again?`);
+          if (reOpen) handleOpen();
+          setIsLoading(false);
+          return;
+        }
       }
 
-      if (permission === 'granted') {
-        setDirHandle(project.handle);
-        setMode(project.mode || 'researcher');
-        setViewState('editor');
+      setDirHandle(activeHandle);
+      setMode(project.mode || 'researcher');
+      setViewState('editor');
 
-        await openDirectoryWithHandle(project.handle);
-        // Update timestamp
-        await saveRecentProject(project.handle, project.name, project.mode);
-      } else {
-        alert('Permission denied. Cannot open folder.');
-      }
+      await openDirectoryWithHandle(activeHandle);
+      // Update timestamp and potentially ensure handle is saved
+      await saveRecentProject(activeHandle, project.name, project.mode);
+
     } catch (e) {
       console.error('Failed to open recent', e);
       if (e.name === 'NotFoundError') {
@@ -197,6 +229,26 @@ function App() {
     }, 60000); // 1 minute
     return () => clearInterval(interval);
   }, [isDirty, content, metadata, projectMetadata, currentFile, dirHandle, fileHandle, mode]);
+
+  // Live Live Preview Logic
+  useEffect(() => {
+    if (projectMetadata?.livePreview) {
+      const handler = setTimeout(() => {
+        setPreviewContent(content);
+      }, 500);
+      return () => clearTimeout(handler);
+    } else {
+      // If live preview is disabled, we don't automatically update previewContent here.
+      // It will only be updated in handleSave.
+    }
+  }, [content, projectMetadata?.livePreview]);
+
+  // Sync preview immediately when livePreview is toggled ON
+  useEffect(() => {
+    if (projectMetadata?.livePreview) {
+      setPreviewContent(content);
+    }
+  }, [projectMetadata?.livePreview]);
 
   const handleAutoSave = async () => {
     // Only autosave if we have a place to save to without prompting
@@ -339,11 +391,13 @@ function App() {
 
     setIsLoading(true);
     try {
-      const dir = await window.showDirectoryPicker({
-        id: 'feder-projects',
-        mode: 'readwrite'
-      });
-      setDirHandle(dir);
+      const dir = await openDirectory(); // Uses unified hook with Electron support
+      if (!dir) {
+        setIsLoading(false);
+        return;
+      }
+
+      // setDirHandle is already done in openDirectory hook if successful, but we need 'dir' variable.
 
       // We don't know the mode yet. setViewState('editor') is fine.
       setViewState('editor');
@@ -378,47 +432,42 @@ function App() {
     const fullContent = stringifyFileContent();
 
     try {
-      if (mode === 'researcher') {
-        if (dirHandle) {
-          // Save project metadata first
-          await writeFileInDir(dirHandle, 'project_metadata.json', JSON.stringify(projectMetadata, null, 2));
+      // If we have a directory handle (Project Mode), always save the project metadata
+      if (dirHandle) {
+        await writeFileInDir(dirHandle, 'project_metadata.json', JSON.stringify(projectMetadata, null, 2));
 
-          if (currentFile.handle) {
-            await saveFile(fullContent, currentFile.handle);
-          } else {
-            // Fallback / New File in Project
-            const name = currentFile.name || 'main.md';
-            const handle = await writeFileInDir(dirHandle, name, fullContent);
-            setFileHandle(handle);
-            setCurrentFile(prev => ({ ...prev, handle }));
+        if (currentFile.handle) {
+          await saveFile(fullContent, currentFile.handle);
+        } else {
+          // Fallback / New File in Project
+          const name = currentFile.name || 'main.md';
+          const handle = await writeFileInDir(dirHandle, name, fullContent);
+          setFileHandle(handle);
+          setCurrentFile(prev => ({ ...prev, handle }));
 
-            await saveRecentProject(dirHandle, projectMetadata.name, mode);
-          }
-          setPreviewContent(content);
-          setIsDirty(false);
-        } else if (!isSilent) {
-          // Saving a NEW Research Project - only if NOT silent
-          const dir = await window.showDirectoryPicker({
-            id: 'feder-projects',
-            mode: 'readwrite'
-          });
-
-          const safeTitle = projectMetadata.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-          await writeFileInDir(dir, 'project_metadata.json', JSON.stringify({ name: projectMetadata.name, mode: 'researcher' }, null, 2));
-
-          const mainFileName = `main.md`;
-
-          const mdHandle = await writeFileInDir(dir, mainFileName, fullContent);
-          await createSubDir(dir, 'figures');
-          await writeFileInDir(dir, 'references.bib', '');
-
-          setDirHandle(dir);
-          setFileHandle(mdHandle);
-          setCurrentFile({ name: mainFileName, kind: 'md', handle: mdHandle });
-          setPreviewContent(content);
-          setIsDirty(false);
+          await saveRecentProject(dirHandle, projectMetadata.name, mode);
         }
+        setPreviewContent(content);
+        setIsDirty(false);
+      } else if (mode === 'researcher' && !isSilent) {
+        // Saving a NEW Research Project - only if NOT silent
+        const dir = await window.showDirectoryPicker({
+          id: 'feder-projects',
+          mode: 'readwrite'
+        });
+
+        await writeFileInDir(dir, 'project_metadata.json', JSON.stringify({ name: projectMetadata.name, mode: 'researcher' }, null, 2));
+
+        const mainFileName = `main.md`;
+        const mdHandle = await writeFileInDir(dir, mainFileName, fullContent);
+        await createSubDir(dir, 'figures');
+        await writeFileInDir(dir, 'references.bib', '');
+
+        setDirHandle(dir);
+        setFileHandle(mdHandle);
+        setCurrentFile({ name: mainFileName, kind: 'md', handle: mdHandle });
+        setPreviewContent(content);
+        setIsDirty(false);
       } else {
         // Individual file mode
         if (fileHandle) {
@@ -478,13 +527,17 @@ function App() {
     try {
       // All modes now use folder-based structure
       // 1. Select Folder
-      const parentDir = await window.showDirectoryPicker({
-        id: 'feder-projects-root',
-        mode: 'readwrite'
-      });
+      // We use openDirectory but we need to ensure the user knows they are selecting a ROOT folder
+      alert("Please select the ROOT folder where the new project folder will be created.");
+      const parentDir = await openDirectory();
+      if (!parentDir) {
+        setIsLoading(false);
+        return;
+      }
 
       // 2. Create Subfolder
       const safeName = name.trim() || 'Untitled Project';
+      // Electron adapter supports getDirectoryHandle with create: true
       const projectDir = await parentDir.getDirectoryHandle(safeName, { create: true });
 
       setMode(newMode);
@@ -510,15 +563,13 @@ function App() {
         switch (newMode) {
           case 'journalist':
             await createSubDir(projectDir, 'figures');
-            const cat1 = await createSubDir(projectDir, 'Category 1');
-            const cat2 = await createSubDir(projectDir, 'Category 2');
+            const draftsDir = await createSubDir(projectDir, 'Drafts');
+            const interviewsDir = await createSubDir(projectDir, 'Interviews');
 
-            const journalBoilerplate = (title, author, profession) => `---\ntitle: ${title}\nsubtitle: Subtitle...\nauthor: ${author || 'Author Name'}\nprofession: ${profession || 'Profession'}\nemail: ${settings.email || ''}\nphone: ${settings.phone || ''}\ndate: ${new Date().toISOString().split('T')[0]}\n---\n\n# ${title}\n\nContent...`;
+            const journalBoilerplate = (title, author, profession) => `---\ntitle: ${title}\nsubtitle: Lead Paragraph...\njournalist: ${author || 'Journalist'}\nprofession: ${profession || 'Press Reporter'}\nemail: ${settings.email || ''}\nphone: ${settings.phone || ''}\ndate: ${new Date().toISOString().split('T')[0]}\nsource: |\n  Source Details\n  Affiliation\n---\n\n# ${title}\n\n[Location / Dateline]\n\nWrite your press article or report here...`;
 
-            await writeFileInDir(cat1, 'pressNote1.md', journalBoilerplate('Press Note 1', settings.name, settings.profession));
-            await writeFileInDir(cat1, 'pressNote2.md', journalBoilerplate('Press Note 2', settings.name, settings.profession));
-            await writeFileInDir(cat2, 'pressNote1.md', journalBoilerplate('Press Note 1', settings.name, settings.profession));
-            await writeFileInDir(cat2, 'pressNote2.md', journalBoilerplate('Press Note 2', settings.name, settings.profession));
+            await writeFileInDir(draftsDir, 'Draft_1.md', journalBoilerplate('Article Draft 1', settings.name, settings.profession));
+            await writeFileInDir(interviewsDir, 'Interview_Record.md', journalBoilerplate('Interview Notes', settings.name, settings.profession));
 
             const notesHandle = await writeFileInDir(projectDir, 'notes.md', `# Notes: ${safeName}\n\nKey points...`);
             mainFileHandle = notesHandle; // Open notes.md by default
@@ -526,11 +577,18 @@ function App() {
             break;
 
           case 'engineer':
+            const engBoilerplate = (title) => `---\ntitle: ${title}\nproject: ${safeName}\ndate: ${new Date().toISOString().split('T')[0]}\nauthors:\n  - name: ${settings.name || 'Engineer'}\n    affiliation: ${settings.affiliation || ''}\n---\n\n# ${title}\n\nTechnical details and analysis for ${safeName}.`;
+
+            const expDirEng = await createSubDir(projectDir, '1_Exposure_Model');
+            const hazDirEng = await createSubDir(projectDir, '2_Hazard_Model');
+            const vulDirEng = await createSubDir(projectDir, '3_Vulnerability_Model');
             await createSubDir(projectDir, 'figures');
-            const engBoilerplate = `---\ntitle: ${safeName}\nclient: Placeholder Client\nprojectId: ENG-${new Date().getFullYear()}-001\ndate: ${new Date().toISOString().split('T')[0]}\nrevision: Rev 0\nauthors:\n  - name: Engineer Name\n    affiliation: Structural Department\n---\n\n# Engineer's Report: ${safeName}\n\n## Summary\n\nThis report presents calculation results...`;
-            const reportHandle = await writeFileInDir(projectDir, 'report.md', engBoilerplate);
-            mainFileHandle = reportHandle;
-            mainFileName = 'report.md';
+
+            mainFileHandle = await writeFileInDir(expDirEng, 'Exposure_Analysis.md', engBoilerplate('Exposure Model'));
+            await writeFileInDir(hazDirEng, 'Hazard_Analysis.md', engBoilerplate('Hazard Model'));
+            await writeFileInDir(vulDirEng, 'Vulnerability_Analysis.md', engBoilerplate('Vulnerability Model'));
+
+            mainFileName = '1_Exposure_Model/Exposure_Analysis.md';
             break;
 
           case 'scholar':
@@ -559,11 +617,21 @@ function App() {
 
           case 'researcher':
           default:
-            const mainHandle = await writeFileInDir(projectDir, 'main.md', `# ${safeName}\n\nStart writing...`);
+            const resBoilerplate = (stage) => `---\ntitle: ${stage}\nproject: ${safeName}\nauthor: ${settings.name || 'Researcher'}\ndate: ${new Date().toLocaleDateString()}\n---\n\n# ${stage}\n\nDescription of the ${stage.toLowerCase()} for the Seismic Risk Analysis of ${safeName}.`;
+
+            const expDir = await createSubDir(projectDir, '1_Exposure_Model');
+            const hazDir = await createSubDir(projectDir, '2_Hazard_Model');
+            const vulDir = await createSubDir(projectDir, '3_Vulnerability_Model');
+            const lossDir = await createSubDir(projectDir, '4_Loss_Estimation');
             await createSubDir(projectDir, 'figures');
+
+            mainFileHandle = await writeFileInDir(expDir, 'Exposure_Characterization.md', resBoilerplate('Exposure Model'));
+            await writeFileInDir(hazDir, 'Hazard_Definition.md', resBoilerplate('Hazard Model'));
+            await writeFileInDir(vulDir, 'Fragility_Curves.md', resBoilerplate('Vulnerability Model'));
+            await writeFileInDir(lossDir, 'Loss_Analysis.md', resBoilerplate('Loss Estimation'));
             await writeFileInDir(projectDir, 'references.bib', '');
-            mainFileHandle = mainHandle;
-            mainFileName = 'main.md';
+
+            mainFileName = '1_Exposure_Model/Exposure_Characterization.md';
             break;
         }
 
@@ -578,14 +646,14 @@ function App() {
         }
 
       } else {
-        // Empty project
-        setProjectMetadata(metadata);
-        // Empty project
+        // Empty project - still ensure we open the directory
         setProjectMetadata(metadata);
         setContent('');
         setPreviewContent('');
         setMetadata({});
         setCurrentFile({ name: 'Untitled', kind: 'md', handle: null });
+        // Make sure the FileExplorer can see the project root even if empty
+        setDirHandle(projectDir);
       }
 
       // 4. Open
@@ -731,22 +799,54 @@ function App() {
   };
 
   const handleRename = async (handle, newName) => {
+    if (!handle || !newName || newName === handle.name) return;
     try {
       if (handle.kind === 'file') {
+        // Check if file with new name already exists
+        try {
+          await dirHandle.getFileHandle(newName);
+          alert('A file with this name already exists.');
+          return;
+        } catch (e) {
+          // File does not exist, proceed
+        }
+
+        // Native move support (Chrome 111+)
         if (handle.move) {
           await handle.move(newName);
-          // If the renamed file is the one currently open, update state
           if (currentFile.handle && currentFile.handle.name === handle.name) {
             setCurrentFile(prev => ({ ...prev, name: newName }));
           }
         } else {
-          alert('Renaming not supported in this browser version (requires handle.move)');
-          return;
+          // Copy & Delete Polyfill: Read content
+          const file = await handle.getFile();
+          // Read as arrayBuffer to support all file types (images, etc)
+          const buffer = await file.arrayBuffer();
+
+          // Create new file
+          const newFileHandle = await dirHandle.getFileHandle(newName, { create: true });
+          const writable = await newFileHandle.createWritable();
+          await writable.write(buffer);
+          await writable.close();
+
+          // Delete old
+          await dirHandle.removeEntry(handle.name);
+
+          // Update state if currently open
+          if (currentFile.handle && currentFile.handle.name === handle.name) {
+            // We need to switch to the new handle because the old one is invalid
+            setFileHandle(newFileHandle);
+            setCurrentFile(prev => ({ ...prev, name: newName, handle: newFileHandle }));
+          }
         }
+      } else if (handle.kind === 'directory') {
+        alert('Folder renaming is not fully supported in this version.');
       }
+      // Refresh explorer
       setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error('Rename failed', e);
+      alert('Rename failed: ' + e.message);
     }
   };
 
@@ -925,6 +1025,7 @@ function App() {
     <Preview
       content={previewContent}
       metadata={metadata}
+      projectMetadata={projectMetadata}
       dirHandle={dirHandle}
       mode={mode}
       onUpdateContent={handleUpdateFromPreview}
@@ -934,6 +1035,7 @@ function App() {
 
   return (
     <>
+      {isElectron && <div className="titlebar-drag-region" />}
       {isLoading && (
         <div className="loading-overlay">
           <div className="spinner"></div>
@@ -958,6 +1060,7 @@ function App() {
             await saveSettings(newSettings);
           }}
           onRemoveRecent={removeRecentProject}
+          isElectron={isElectron}
         />
       ) : (
         <Layout

@@ -110,16 +110,12 @@
     margin: 0 auto;
 }
 
+/* Research Mode Overrides */
 .panel-preview.research-mode {
-    background-color: white;
-    /* Often preferable for reading layout */
-    color: #333;
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
 }
 
-.dark .panel-preview.research-mode {
-    background-color: #1e1e1e;
-    color: #e0e0e0;
-}
 
 /* Add this to your HTML <head> or at the top of your CSS file */
 
@@ -224,13 +220,8 @@
 
 /* Engineer Mode Styles */
 .panel-preview.engineer-mode {
-    background-color: white;
-    color: #000;
-}
-
-.dark .panel-preview.engineer-mode {
-    background-color: #121212;
-    color: #ececec;
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
 }
 
 .preview-content.eng-report-layout {
@@ -408,9 +399,8 @@
 }
 
 .dark .preview-content.script-layout {
-    background: #fdfdfd;
-    /* Scripts usually stay "paper" looking even in dark mode previews for accuracy */
-    color: #111;
+    background: var(--bg-panel);
+    color: var(--text-primary);
 }
 
 .script-cover-page {
@@ -571,13 +561,8 @@
 
 /* Scholar Mode Styles */
 .panel-preview.scholar-mode {
-    background-color: #fcfcfc;
-    color: #2c3e50;
-}
-
-.dark .panel-preview.scholar-mode {
-    background-color: #1a1c1e;
-    color: #e2e2e2;
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
 }
 
 .preview-content.scholar-lecture-layout {
@@ -706,4 +691,106 @@
 /* Ensure inline math doesn't break layout */
 .katex {
     font-size: 1.05em;
+}
+
+/* Journalist Mode Styles (NYT Inspired) */
+/* Journalist Mode Styles (NYT Inspired) */
+.panel-preview.journalist-mode {
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
+}
+
+.preview-content.journal-layout {
+    font-family: "Georgia", "Times New Roman", "Latin Modern Roman", serif;
+    padding: 0.8in 1.2in;
+    max-width: 850px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+.panel-preview.journalist-mode {
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
+}
+
+.journal-header {
+    border-bottom: 2px solid var(--text-primary);
+    padding-bottom: 1.5rem;
+    margin-bottom: 3rem;
+    text-align: left;
+}
+
+.journal-meta-top {
+    display: flex;
+    justify-content: flex-start;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 1.2rem;
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+}
+
+.journal-dateline {
+    border-right: 1px solid var(--border-color);
+    padding-right: 15px;
+}
+
+.journal-title {
+    font-family: inherit;
+    font-size: 3.2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 0 0 1rem 0;
+    letter-spacing: -0.01em;
+}
+
+.journal-subtitle {
+    font-family: var(--font-sans);
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+    margin-bottom: 1.5rem;
+    font-weight: 400;
+    font-style: italic;
+    border-left: none;
+    padding-left: 0;
+}
+
+.journal-byline {
+    border-top: 1px solid var(--text-primary);
+    border-bottom: 1px dotted var(--border-color);
+    padding: 0.7rem 0;
+    margin-top: 2rem;
+    font-family: var(--font-sans);
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+}
+
+.byline-info {
+    font-weight: 500;
+}
+
+.journalist-name {
+    font-weight: 800;
+    text-transform: uppercase;
+    text-decoration: none;
+}
+
+.journalist-profession {
+    color: var(--text-secondary);
+    margin-left: 4px;
+}
+
+.journal-layout .prose {
+    font-size: 1.2rem;
+    text-align: left;
+    color: var(--text-primary);
+}
+
+.journal-layout .prose p {
+    margin-bottom: 1.5rem;
 }

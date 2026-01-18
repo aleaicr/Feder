@@ -13,6 +13,7 @@ node_modules
 
 # Build Output
 dist
+dist_electron
 dist-ssr
 *.local
 
@@ -50,5 +51,3 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
-
-TOWEBSITE.md
