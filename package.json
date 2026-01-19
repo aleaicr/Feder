@@ -47,7 +47,7 @@
     "appId": "com.aleaicr.feder",
     "productName": "Feder",
     "directories": {
-      "output": "dist_electron"
+      "output": "installer"
     },
     "files": [
       "dist/**/*",

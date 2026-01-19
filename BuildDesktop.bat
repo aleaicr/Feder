@@ -24,7 +24,7 @@ echo       FEDER DESKTOP BUILDER
 echo ==========================================
 echo.
 echo Cleaning previous builds...
-rmdir /s /q dist_electron 2>nul
+rmdir /s /q installer 2>nul
 echo.
 echo Starting build process...
 call npm run electron:build
