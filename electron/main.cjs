@@ -35,6 +35,29 @@ function createWindow() {
             win.loadFile(path.join(__dirname, '../dist/index.html'));
         }
     }
+
+    // Zoom Handling
+    win.webContents.on('did-finish-load', () => {
+        win.webContents.setZoomFactor(1.2); // Set initial zoom to 120%
+    });
+
+    win.webContents.on('before-input-event', (event, input) => {
+        if (input.control && input.type === 'keyDown') {
+            const currentZoom = win.webContents.getZoomFactor();
+            if (input.key === '=' || input.key === '+') {
+                win.webContents.setZoomFactor(currentZoom + 0.1);
+                event.preventDefault();
+            } else if (input.key === '-') {
+                if (currentZoom > 0.5) {
+                    win.webContents.setZoomFactor(currentZoom - 0.1);
+                }
+                event.preventDefault();
+            } else if (input.key === '0') {
+                win.webContents.setZoomFactor(1.2); // Reset to custom default
+                event.preventDefault();
+            }
+        }
+    });
 }
 
 // IPC Handlers for File System
