@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderOpen, FilePlus, BookOpen, PenTool, Feather, Settings, X, Sun, Moon, SunMoon, Trash2, CloudSun } from 'lucide-react';
+import { FolderOpen, FilePlus, BookOpen, PenTool, Feather, Settings, X, Sun, Moon, SunMoon, Trash2, CloudSun, Download, RefreshCw } from 'lucide-react';
 
 export function WelcomeScreen({ onNewProject, onOpenProject, recentProjects, onOpenRecent, theme, toggleTheme, settings, onUpdateSettings, onRemoveRecent, isElectron }) {
     const [newItemName, setNewItemName] = useState('');
@@ -344,6 +344,11 @@ export function WelcomeScreen({ onNewProject, onOpenProject, recentProjects, onO
                                 placeholder="+569..."
                             />
                         </div>
+
+                        {/* Updates Section */}
+                        <div style={{ marginTop: 10, paddingTop: 20, borderTop: '1px solid var(--border-color)' }}>
+                            <UpdateChecker isElectron={isElectron} />
+                        </div>
                     </div>
                     <div style={{ marginTop: 'auto', padding: '10px 0', opacity: 0.4, fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
                         All changes are saved automatically.
@@ -566,3 +571,161 @@ const modeCardPremiumStyle = {
     transition: 'all 0.2s',
     color: 'var(--text-primary)'
 };
+
+function UpdateChecker({ isElectron }) {
+    const [updateStatus, setUpdateStatus] = useState({ state: 'idle', version: null, url: null }); // idle, checking, available, up-to-date, error
+    const [currentAppVersion, setCurrentAppVersion] = useState('Unknown');
+
+    React.useEffect(() => {
+        const fetchVersion = async () => {
+            if (isElectron && window.electronAPI && window.electronAPI.getVersion) {
+                try {
+                    const v = await window.electronAPI.getVersion();
+                    setCurrentAppVersion(v);
+                } catch (e) {
+                    console.error("Failed to get version", e);
+                }
+            }
+        };
+        fetchVersion();
+    }, [isElectron]);
+
+    const checkForUpdates = async () => {
+        setUpdateStatus({ ...updateStatus, state: 'checking' });
+        try {
+            // Fetch centralized registry from Everything Engineering
+            const response = await fetch(`https://everythingengineering.github.io/api/registry.json?t=${new Date().getTime()}`, { cache: "no-store" });
+            if (!response.ok) throw new Error('Network response was not ok');
+            const registry = await response.json();
+
+            // Get Feder specific data
+            const data = registry['feder'];
+
+            if (!data) {
+                console.warn("Feder not found in registry");
+                setUpdateStatus({ state: 'error' });
+                return;
+            }
+
+            // Simple semantic version compare
+            const isNewer = compareVersions(currentAppVersion, data.latestVersion);
+
+            if (isNewer) {
+                setUpdateStatus({ state: 'available', version: data.latestVersion, url: data.downloadUrl });
+            } else {
+                setUpdateStatus({ state: 'up-to-date', version: currentAppVersion, url: null });
+            }
+        } catch (e) {
+            console.error(e);
+            setUpdateStatus({ state: 'error' });
+        }
+    };
+
+    const compareVersions = (v1, v2) => {
+        if (!v1 || !v2 || v1 === 'Unknown') return false;
+        // removing 'v' if present
+        const cleanV1 = v1.replace(/^v/, '');
+        const cleanV2 = v2.replace(/^v/, '');
+
+        const p1 = cleanV1.split('.').map(Number);
+        const p2 = cleanV2.split('.').map(Number);
+
+        for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+            const n1 = p1[i] || 0;
+            const n2 = p2[i] || 0;
+            if (n2 > n1) return true;
+            if (n1 > n2) return false;
+        }
+        return false;
+    };
+
+    const handleUpdateClick = () => {
+        if (updateStatus.url) {
+            if (isElectron && window.electronAPI && window.electronAPI.openExternal) {
+                window.electronAPI.openExternal(updateStatus.url);
+            } else {
+                window.open(updateStatus.url, '_blank');
+            }
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="section-label" style={labelStyle}>
+                <span>Software Update</span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>Current Version</span>
+                    <span style={{ fontSize: '0.8rem', opacity: 0.6, color: 'var(--text-secondary)' }}>v{currentAppVersion}</span>
+                </div>
+                <button
+                    onClick={checkForUpdates}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 12px',
+                        background: 'var(--bg-app)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        transition: 'all 0.2s'
+                    }}
+                >
+                    <RefreshCw size={14} className={updateStatus.state === 'checking' ? 'spin' : ''} />
+                    {updateStatus.state === 'checking' ? 'Checking...' : 'Check'}
+                </button>
+            </div>
+
+            {updateStatus.state === 'available' && (
+                <div style={{ marginTop: 8, padding: 12, background: 'rgba(var(--accent-color-rgb), 0.1)', borderRadius: 12, border: '1px solid var(--accent-color)' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-color)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Download size={16} />
+                        New Version: v{updateStatus.version}
+                    </div>
+                    <button
+                        onClick={handleUpdateClick}
+                        style={{
+                            width: '100%',
+                            padding: '10px',
+                            background: 'var(--accent-color)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: 10,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            fontSize: '0.9rem'
+                        }}
+                    >
+                        Download Update
+                    </button>
+                </div>
+            )}
+
+            {updateStatus.state === 'up-to-date' && (
+                <div style={{ padding: '8px 12px', background: 'rgba(46, 204, 113, 0.1)', borderRadius: 8, fontSize: '0.85rem', color: '#27ae60', fontWeight: 600, textAlign: 'center' }}>
+                    You are up to date!
+                </div>
+            )}
+            {updateStatus.state === 'error' && (
+                <div style={{ padding: '8px 12px', background: 'rgba(255, 71, 87, 0.1)', borderRadius: 8, fontSize: '0.85rem', color: '#ff4757', fontWeight: 600, textAlign: 'center' }}>
+                    Failed to check for updates.
+                </div>
+            )}
+
+            <style>{`
+                .spin {
+                    animation: spin 1s linear infinite;
+                }
+                @keyframes spin { 
+                    100% { -webkit-transform: rotate(360deg); transform:rotate(360deg); } 
+                }
+            `}</style>
+        </div>
+    );
+}

@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     writeFile: (path, data) => ipcRenderer.invoke('fs:writeFile', { path, data }),
     createDir: (path) => ipcRenderer.invoke('fs:createDir', path),
     delete: (path) => ipcRenderer.invoke('fs:delete', path),
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
     isElectron: true
 });
 

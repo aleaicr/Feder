@@ -109,6 +109,15 @@ ipcMain.handle('fs:delete', async (_, targetPath) => {
 });
 // End IPC Handlers
 
+ipcMain.handle('app:getVersion', () => {
+    return app.getVersion();
+});
+
+ipcMain.handle('shell:openExternal', async (_, url) => {
+    const { shell } = require('electron');
+    await shell.openExternal(url);
+});
+
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
