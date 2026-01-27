@@ -34,6 +34,17 @@ const createDirHandle = (path, name) => {
                 }
             }
         },
+        async move(destination, newName) {
+            let targetPath;
+            if (typeof destination === 'string') {
+                const pathParts = path.split(/[\\/]/);
+                pathParts.pop();
+                targetPath = [...pathParts, destination].join('\\');
+            } else {
+                targetPath = `${destination.path}\\${newName || name}`;
+            }
+            await window.electronAPI.rename(path, targetPath);
+        },
         async removeEntry(name, opts) {
             const targetPath = `${path}\\${name}`;
             await window.electronAPI.delete(targetPath);
@@ -72,10 +83,16 @@ const createFileHandle = (path, name) => {
                 close: async () => { }
             };
         },
-        async move(newName) {
-            // Not implemented in this basic adapter yet, but requested in app code sometimes.
-            // Using delete/write logic in app fallback.
-            // Or implement rename IPC if needed.
+        async move(destination, newName) {
+            let targetPath;
+            if (typeof destination === 'string') {
+                const pathParts = path.split(/[\\/]/);
+                pathParts.pop();
+                targetPath = [...pathParts, destination].join('\\');
+            } else {
+                targetPath = `${destination.path}\\${newName || name}`;
+            }
+            await window.electronAPI.rename(path, targetPath);
         },
         async remove() {
             await window.electronAPI.delete(path);

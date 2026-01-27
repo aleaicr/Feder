@@ -1,14 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Folder, FileText, ChevronRight, ChevronDown, Image as ImageIcon, FileJson, ExternalLink, FilePlus, FolderPlus, Edit2, Check, X, Trash2 } from 'lucide-react';
 
-export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, onOpenProject, onRename, onDelete, onCreateFile, onCreateFolder, refreshTrigger }) {
+export function FileExplorer({
+    dirHandle,
+    onFileSelect,
+    currentFilename,
+    mode,
+    onOpenProject,
+    onRename,
+    onDelete,
+    onCreateFile,
+    onCreateFolder,
+    refreshTrigger,
+    initialExpandedFolders = {},
+    onExplorerStateChange,
+    onMove,
+    customOrder = {},
+    onOrderChange
+}) {
     const [files, setFiles] = useState([]);
-    const [expandedFolders, setExpandedFolders] = useState({});
+    const [expandedFolders, setExpandedFolders] = useState(initialExpandedFolders);
     const [editingPath, setEditingPath] = useState(null);
     const [tempName, setTempName] = useState('');
+    const [draggedNode, setDraggedNode] = useState(null);
+    const [draggedPath, setDraggedPath] = useState(null);
+    const [dropTarget, setDropTarget] = useState(null); // { path, position: 'before' | 'after' | 'inside' }
+
+    // Sync expanded state when initial prop changes (usually on project open)
+    useEffect(() => {
+        if (initialExpandedFolders && Object.keys(initialExpandedFolders).length > 0) {
+            setExpandedFolders(initialExpandedFolders);
+        }
+    }, [initialExpandedFolders]);
+
+    // Sort nodes using custom order if available
+    const sortNodes = useCallback((nodes, parentPath = '') => {
+        const orderKey = parentPath || '/';
+        const order = customOrder[orderKey] || [];
+
+        // Create a map for quick lookup
+        const orderMap = new Map();
+        order.forEach((name, index) => orderMap.set(name, index));
+
+        return [...nodes].sort((a, b) => {
+            const aIndex = orderMap.has(a.name) ? orderMap.get(a.name) : Infinity;
+            const bIndex = orderMap.has(b.name) ? orderMap.get(b.name) : Infinity;
+
+            // If both have custom order, use it
+            if (aIndex !== Infinity && bIndex !== Infinity) {
+                return aIndex - bIndex;
+            }
+
+            // If only one has custom order, it comes first
+            if (aIndex !== Infinity) return -1;
+            if (bIndex !== Infinity) return 1;
+
+            // Fallback: folders first, then alphabetical
+            if (a.kind === b.kind) return a.name.localeCompare(b.name);
+            return a.kind === 'directory' ? -1 : 1;
+        });
+    }, [customOrder]);
 
     // Recursive function to scan directory
-    const scanDirectory = async (handle) => {
+    const scanDirectory = async (handle, parentPath = '') => {
         const entries = [];
         for await (const entry of handle.values()) {
             if (entry.kind === 'file') {
@@ -18,7 +72,8 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                     handle: entry
                 });
             } else if (entry.kind === 'directory') {
-                const children = await scanDirectory(entry);
+                const childPath = parentPath ? `${parentPath}/${entry.name}` : `/${entry.name}`;
+                const children = await scanDirectory(entry, childPath);
                 entries.push({
                     name: entry.name,
                     kind: 'directory',
@@ -27,11 +82,7 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                 });
             }
         }
-        // Sort: Folders first, then files
-        return entries.sort((a, b) => {
-            if (a.kind === b.kind) return a.name.localeCompare(b.name);
-            return a.kind === 'directory' ? -1 : 1;
-        });
+        return sortNodes(entries, parentPath);
     };
 
     useEffect(() => {
@@ -43,7 +94,7 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                 return;
             }
             try {
-                const tree = await scanDirectory(dirHandle);
+                const tree = await scanDirectory(dirHandle, '');
                 if (mounted) setFiles(tree);
             } catch (err) {
                 console.error("Error scanning dir", err);
@@ -53,7 +104,7 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
         loadFiles();
 
         return () => { mounted = false; };
-    }, [dirHandle, refreshTrigger]);
+    }, [dirHandle, refreshTrigger, sortNodes]);
 
     if (!dirHandle) {
         return (
@@ -88,10 +139,14 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
     }
 
     const toggleFolder = (name) => {
-        setExpandedFolders(prev => ({
-            ...prev,
-            [name]: !prev[name]
-        }));
+        const next = {
+            ...expandedFolders,
+            [name]: !expandedFolders[name]
+        };
+        setExpandedFolders(next);
+        if (onExplorerStateChange) {
+            onExplorerStateChange({ expandedFolders: next });
+        }
     };
 
     // Mock open in OS file explorer
@@ -106,22 +161,281 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
         });
     };
 
+    const handleDragStart = (e, node, path, parentPath) => {
+        e.stopPropagation();
+        setDraggedNode(node);
+        setDraggedPath({ path, parentPath });
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragEnd = () => {
+        setDraggedNode(null);
+        setDraggedPath(null);
+        setDropTarget(null);
+    };
+
+    const handleDragOver = (e, path, parentPath, isFolder = false) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!draggedNode) return;
+
+        // Calculate drop position based on mouse position within the element
+        const rect = e.currentTarget.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const height = rect.height;
+
+        let position;
+        if (isFolder && y > height * 0.25 && y < height * 0.75) {
+            position = 'inside';
+        } else if (y < height / 2) {
+            position = 'before';
+        } else {
+            position = 'after';
+        }
+
+        setDropTarget({ path, parentPath, position });
+    };
+
+    const handleDragLeave = (e) => {
+        // Only clear if leaving the entire element
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            setDropTarget(null);
+        }
+    };
+
+    const handleDrop = async (e, targetPath, targetParentPath, targetNode) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!draggedNode || !draggedPath) {
+            setDropTarget(null);
+            return;
+        }
+
+        const position = dropTarget?.position || 'after';
+
+        // Prevent dropping on itself
+        if (draggedPath.path === targetPath) {
+            setDropTarget(null);
+            handleDragEnd();
+            return;
+        }
+
+        // If dropping inside a folder, move the item
+        if (position === 'inside' && targetNode?.kind === 'directory') {
+            if (onMove) {
+                await onMove(draggedNode.handle, targetNode.handle);
+            }
+        } else {
+            // Reordering within the same parent
+            const sourceParent = draggedPath.parentPath || '/';
+            const targetParent = targetParentPath || '/';
+
+            if (sourceParent === targetParent && onOrderChange) {
+                // Get current order for this parent
+                const currentOrder = customOrder[sourceParent] || [];
+                const siblings = files.filter(n => true); // Will be refined based on parent
+
+                // Calculate new order
+                const newOrder = reorderItems(
+                    sourceParent,
+                    draggedNode.name,
+                    targetNode?.name || null,
+                    position,
+                    currentOrder,
+                    getAllItemNamesInPath(sourceParent)
+                );
+
+                onOrderChange(sourceParent, newOrder);
+            } else if (sourceParent !== targetParent) {
+                // Moving to a different parent - need to both move and update order
+                // First, determine the target directory handle
+                let targetDirHandle = dirHandle;
+                if (targetParent !== '/') {
+                    // Navigate to target parent
+                    const parts = targetParent.split('/').filter(Boolean);
+                    for (const part of parts) {
+                        targetDirHandle = await targetDirHandle.getDirectoryHandle(part);
+                    }
+                }
+
+                if (onMove) {
+                    await onMove(draggedNode.handle, targetDirHandle);
+                }
+
+                // Update order in target parent
+                if (onOrderChange) {
+                    const targetOrder = customOrder[targetParent] || [];
+                    const insertIndex = position === 'before'
+                        ? targetOrder.indexOf(targetNode?.name || '')
+                        : targetOrder.indexOf(targetNode?.name || '') + 1;
+
+                    const newOrder = [...targetOrder];
+                    if (insertIndex >= 0 && insertIndex <= newOrder.length) {
+                        newOrder.splice(insertIndex, 0, draggedNode.name);
+                    } else {
+                        newOrder.push(draggedNode.name);
+                    }
+                    onOrderChange(targetParent, newOrder);
+                }
+            }
+        }
+
+        setDropTarget(null);
+        handleDragEnd();
+    };
+
+    // Helper to get all item names in a specific path
+    const getAllItemNamesInPath = (parentPath) => {
+        if (parentPath === '/' || parentPath === '') {
+            return files.map(f => f.name);
+        }
+
+        // Navigate to the parent folder
+        const parts = parentPath.split('/').filter(Boolean);
+        let current = files;
+        for (const part of parts) {
+            const folder = current.find(n => n.kind === 'directory' && n.name === part);
+            if (folder && folder.children) {
+                current = folder.children;
+            } else {
+                return [];
+            }
+        }
+        return current.map(f => f.name);
+    };
+
+    // Reorder logic
+    const reorderItems = (parentPath, draggedName, targetName, position, currentOrder, allNames) => {
+        // Build complete order list
+        let orderedNames = [...allNames];
+
+        // Sort by current custom order if exists
+        if (currentOrder.length > 0) {
+            orderedNames.sort((a, b) => {
+                const aIdx = currentOrder.indexOf(a);
+                const bIdx = currentOrder.indexOf(b);
+                if (aIdx === -1 && bIdx === -1) return 0;
+                if (aIdx === -1) return 1;
+                if (bIdx === -1) return -1;
+                return aIdx - bIdx;
+            });
+        }
+
+        // Remove dragged item from its current position
+        orderedNames = orderedNames.filter(n => n !== draggedName);
+
+        // Find target index
+        let targetIndex = targetName ? orderedNames.indexOf(targetName) : orderedNames.length;
+        if (targetIndex === -1) targetIndex = orderedNames.length;
+
+        // Insert at new position
+        if (position === 'after') {
+            targetIndex += 1;
+        }
+
+        orderedNames.splice(targetIndex, 0, draggedName);
+
+        return orderedNames;
+    };
+
+    const renderDropIndicator = (position) => {
+        if (position === 'inside') return null;
+        return (
+            <div
+                className={`drop-indicator ${position}`}
+                style={{
+                    position: 'absolute',
+                    left: 16,
+                    right: 16,
+                    height: 2,
+                    background: 'var(--accent-color)',
+                    borderRadius: 1,
+                    [position === 'before' ? 'top' : 'bottom']: -1,
+                    zIndex: 10
+                }}
+            />
+        );
+    };
+
     const renderTree = (nodes, pathPrefix = '') => {
-        return nodes.map(node => {
-            if (node.kind === 'file' && node.name.endsWith('.bib') && mode !== 'researcher') {
-                return null;
+        return nodes.map((node, index) => {
+            if (node.kind === 'file') {
+                if (node.name === 'project_metadata.json') return null;
+                if (node.name.endsWith('.bib') && mode !== 'researcher') return null;
             }
 
             const path = `${pathPrefix}/${node.name}`;
             const isExpanded = expandedFolders[path];
+            const isDropTarget = dropTarget?.path === path;
+            const dropPosition = isDropTarget ? dropTarget.position : null;
 
             if (node.kind === 'directory') {
+                const isEditing = editingPath === path;
                 return (
                     <div key={path} className="file-tree-node">
-                        <div className="file-tree-item folder" onClick={() => toggleFolder(path)}>
+                        <div
+                            className={`file-tree-item folder ${isDropTarget && dropPosition === 'inside' ? 'drop-target-inside' : ''}`}
+                            onClick={() => !isEditing && toggleFolder(path)}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, node, path, pathPrefix)}
+                            onDragEnd={handleDragEnd}
+                            onDragOver={(e) => handleDragOver(e, path, pathPrefix, true)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, path, pathPrefix, node)}
+                            style={{ position: 'relative' }}
+                        >
+                            {isDropTarget && dropPosition === 'before' && renderDropIndicator('before')}
                             {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                             <Folder size={14} className="icon-folder" />
-                            <span>{node.name}</span>
+                            {isEditing ? (
+                                <input
+                                    autoFocus
+                                    value={tempName}
+                                    onChange={(e) => setTempName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            onRename(node.handle, tempName, pathPrefix);
+                                            setEditingPath(null);
+                                        } else if (e.key === 'Escape') {
+                                            setEditingPath(null);
+                                        }
+                                    }}
+                                    onBlur={() => setEditingPath(null)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                        background: 'var(--bg-app)',
+                                        border: '1px solid var(--accent-color)',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '0.9rem',
+                                        padding: '2px 4px',
+                                        borderRadius: '4px',
+                                        width: '100%',
+                                        outline: 'none'
+                                    }}
+                                />
+                            ) : (
+                                <>
+                                    <span style={{ flex: 1 }}>{node.name}</span>
+                                    <div className="explorer-actions" onClick={(e) => e.stopPropagation()}>
+                                        <button className="btn-icon small" title="Rename" onClick={() => {
+                                            setEditingPath(path);
+                                            setTempName(node.name);
+                                        }}>
+                                            <Edit2 size={12} />
+                                        </button>
+                                        <button className="btn-icon small" title="Delete" onClick={() => {
+                                            if (window.confirm(`Are you sure you want to delete the folder "${node.name}" and all its contents?`)) {
+                                                onDelete(node.handle);
+                                            }
+                                        }}>
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                            {isDropTarget && dropPosition === 'after' && renderDropIndicator('after')}
                         </div>
                         {isExpanded && (
                             <div className="file-tree-children">
@@ -135,26 +449,24 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                 if (node.name.match(/\.(png|jpg|jpeg|svg|gif)$/i)) Icon = ImageIcon;
                 if (node.name.endsWith('.bib')) Icon = FileJson;
 
-                const isActive = currentFilename === node.name;
+                const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+                const isActive = currentFilename === normalizedPath;
                 const isEditing = editingPath === path;
 
                 return (
                     <div
                         key={path}
                         className={`file-tree-item file ${isActive ? 'active' : ''}`}
-                        onClick={() => !isEditing && onFileSelect(node.handle)}
+                        onClick={() => !isEditing && onFileSelect(node.handle, path)}
                         draggable
-                        onDragStart={(e) => {
-                            // Extract relative path
-                            const relativePath = path.startsWith('/') ? path.substring(1) : path;
-                            e.dataTransfer.setData('text/plain', relativePath);
-                            e.dataTransfer.setData('application/json', JSON.stringify({
-                                name: node.name,
-                                path: relativePath
-                            }));
-                        }}
+                        onDragStart={(e) => handleDragStart(e, node, path, pathPrefix)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(e) => handleDragOver(e, path, pathPrefix, false)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, path, pathPrefix, node)}
+                        style={{ position: 'relative' }}
                     >
-                        <span className="spacer" style={{ width: 14 }}></span>
+                        {isDropTarget && dropPosition === 'before' && renderDropIndicator('before')}
                         <Icon size={14} />
                         {isEditing ? (
                             <input
@@ -163,7 +475,7 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                                 onChange={(e) => setTempName(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
-                                        onRename(node.handle, tempName);
+                                        onRename(node.handle, tempName, pathPrefix);
                                         setEditingPath(null);
                                     } else if (e.key === 'Escape') {
                                         setEditingPath(null);
@@ -192,6 +504,7 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                                 </div>
                             </>
                         )}
+                        {isDropTarget && dropPosition === 'after' && renderDropIndicator('after')}
                     </div>
                 );
             }
@@ -214,7 +527,27 @@ export function FileExplorer({ dirHandle, onFileSelect, currentFilename, mode, o
                     </button>
                 </div>
             </div>
-            <div className="file-list">
+            <div
+                className="file-list"
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    // Allow dropping at the end of the list
+                    if (draggedNode && files.length > 0) {
+                        const lastFile = files[files.length - 1];
+                        setDropTarget({ path: `/${lastFile.name}`, parentPath: '', position: 'after' });
+                    }
+                }}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedNode && dropTarget) {
+                        handleDrop(e, dropTarget.path, '', null);
+                    } else if (draggedNode && onMove) {
+                        // Fallback: move to root
+                        onMove(draggedNode.handle, dirHandle);
+                    }
+                    handleDragEnd();
+                }}
+            >
                 {renderTree(files)}
             </div>
         </div>

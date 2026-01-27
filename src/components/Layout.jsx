@@ -1,5 +1,5 @@
 import React from 'react';
-import { Moon, Sun, Save, FolderOpen, FilePlus, Download, Sidebar, Feather, Settings, SunMoon } from 'lucide-react';
+import { Moon, Sun, Save, FolderOpen, FilePlus, Download, Sidebar, Feather, Settings, SunMoon, FileJson } from 'lucide-react';
 
 export function Layout({
     children,
@@ -8,6 +8,7 @@ export function Layout({
     onNew,
     onExport,
     onImport,
+    onOpenMetadata,
     isDark, // Kept for potential internal use but deprecated
     theme,
     toggleTheme,
@@ -19,15 +20,22 @@ export function Layout({
     showExplorer,
     toggleExplorer,
     onLogoClick,
-    onOpenSettings
+    onOpenSettings,
+    onRename
 }) {
+    const [fileNameInput, setFileNameInput] = React.useState(filename || '');
+
+    React.useEffect(() => {
+        setFileNameInput(filename || '');
+    }, [filename]);
+
     return (
         <div className={`app-layout ${theme !== 'light' ? theme : ''}`}>
             <header className="app-header">
                 <div className="title-group">
                     <button
                         onClick={toggleExplorer}
-                        className={`btn-icon ${showExplorer ? 'active' : ''}`}
+                        className={`btn-sidebar-toggle ${showExplorer ? 'active' : ''}`}
                         title="Toggle Explorer"
                     >
                         <Sidebar size={20} />
@@ -67,9 +75,39 @@ export function Layout({
                                                 mode === 'scriptwriter' ? 'Script' : mode}
                             </div>
                         </div>
-                        <span className="file-status" style={{ marginLeft: 10, opacity: 0.6 }}>
-                            {filename ? `Editing: ${filename}` : ''}
-                        </span>
+                        <div className="file-status" style={{ marginLeft: 10, display: 'flex', alignItems: 'center' }}>
+                            {filename ? (
+                                <input
+                                    value={fileNameInput}
+                                    onChange={(e) => setFileNameInput(e.target.value)}
+                                    onBlur={() => {
+                                        if (onRename && fileNameInput && fileNameInput !== filename) {
+                                            onRename(fileNameInput);
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            e.target.blur();
+                                        }
+                                    }}
+                                    style={{
+                                        background: 'transparent',
+                                        border: '1px solid transparent',
+                                        color: 'var(--text-secondary)',
+                                        fontSize: '0.85rem',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        width: 'auto',
+                                        minWidth: '150px',
+                                        outline: 'none',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    className="filename-input"
+                                    title="Rename File"
+                                />
+                            ) : null}
+                        </div>
                     </div>
                 </div>
 
@@ -83,6 +121,7 @@ export function Layout({
                             <div className="divider"></div>
                         </>
                     )}
+                    <ActionButton onClick={onOpenMetadata} icon={<FileJson size={18} />} label="Project" />
                     <ActionButton onClick={onOpenSettings} icon={<Settings size={18} />} label="Settings" />
 
                     <div className="divider"></div>

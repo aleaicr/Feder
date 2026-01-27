@@ -107,6 +107,9 @@ ipcMain.handle('fs:delete', async (_, targetPath) => {
         return await fs.unlink(targetPath);
     }
 });
+ipcMain.handle('fs:rename', async (_, { oldPath, newPath }) => {
+    return await fs.rename(oldPath, newPath);
+});
 // End IPC Handlers
 
 ipcMain.handle('app:getVersion', () => {

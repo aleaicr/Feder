@@ -185,7 +185,6 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode }) {
                 .btn-close:hover {
                     background: #ff4757;
                     color: white;
-                    transform: rotate(90deg);
                 }
 
                 .modal-body {

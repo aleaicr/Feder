@@ -322,7 +322,39 @@ function App() {
         setMode(d.mode);
       }
     } catch (e) {
-      setProjectMetadata(loadedMeta);
+      // No metadata file exists - ask user if they want to create one
+      const shouldCreate = window.confirm(
+        `This folder doesn't have a Feder project file (project_metadata.json).\n\n` +
+        `This file is required to use Feder features like:\n` +
+        `• Custom file/folder ordering\n` +
+        `• Explorer state persistence\n` +
+        `• Project settings\n\n` +
+        `Would you like to create one now?`
+      );
+
+      if (shouldCreate) {
+        try {
+          const defaultMeta = {
+            name: dir.name,
+            mode: mode, // Use current mode
+            livePreview: false
+          };
+          const metaHandle = await dir.getFileHandle('project_metadata.json', { create: true });
+          const writable = await metaHandle.createWritable();
+          await writable.write(JSON.stringify(defaultMeta, null, 2));
+          await writable.close();
+
+          loadedMeta = defaultMeta;
+          setProjectMetadata(defaultMeta);
+        } catch (createErr) {
+          console.error('Failed to create project_metadata.json', createErr);
+          alert('Failed to create project metadata file. Some features may not work correctly.');
+          setProjectMetadata(loadedMeta);
+        }
+      } else {
+        // User declined - they can still browse but some features won't persist
+        setProjectMetadata(loadedMeta);
+      }
     }
 
     // Look for default file based on mode
@@ -734,7 +766,7 @@ function App() {
   };
 
   // Helper for FileExplorer selection
-  const handleFileSelect = async (handle) => {
+  const handleFileSelect = async (handle, path = '') => {
     // AUTOSAVE BEFORE SWITCHING
     if (isDirty) await handleSave();
 
@@ -742,6 +774,7 @@ function App() {
     try {
       if (handle.kind === 'file') {
         const name = handle.name;
+        const displayName = path ? (path.startsWith('/') ? path.substring(1) : path) : name;
         if (name.endsWith('.md') || name.endsWith('.bib') || name.endsWith('.txt') || name.endsWith('.json')) {
           const data = await readFile(handle);
           setFileHandle(handle);
@@ -752,12 +785,12 @@ function App() {
           if (name.endsWith('.txt')) kind = 'txt';
 
           parseFileContent(data.text, name);
-          setCurrentFile({ name, kind, handle });
+          setCurrentFile({ name: displayName, kind, handle });
         } else if (name.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
           // Image visualization
           const file = await handle.getFile();
           const src = URL.createObjectURL(file);
-          setCurrentFile({ name, kind: 'image', handle, src });
+          setCurrentFile({ name: displayName, kind: 'image', handle, src });
           // We don't change content/metadata, just the view.
         }
       }
@@ -801,56 +834,151 @@ function App() {
     }
   };
 
-  const handleRename = async (handle, newName) => {
+  const copyDirectory = async (srcHandle, destHandle) => {
+    for await (const entry of srcHandle.values()) {
+      if (entry.kind === 'file') {
+        const file = await entry.getFile();
+        const content = await file.arrayBuffer();
+        const newFile = await destHandle.getFileHandle(entry.name, { create: true });
+        const writable = await newFile.createWritable();
+        await writable.write(content);
+        await writable.close();
+      } else if (entry.kind === 'directory') {
+        const newSubDir = await destHandle.getDirectoryHandle(entry.name, { create: true });
+        await copyDirectory(entry, newSubDir);
+      }
+    }
+  };
+
+  const handleRename = async (handle, newName, pathPrefix = '') => {
     if (!handle || !newName || newName === handle.name) return;
+
+    // Prevent renaming the project metadata file
+    if (handle.name === 'project_metadata.json') {
+      alert('The project metadata file cannot be renamed.');
+      return;
+    }
+
+    // Check if we are renaming the currently active file
+    let isCurrentActive = false;
+    if (currentFile.handle) {
+      if (currentFile.handle === handle || currentFile.handle.name === handle.name) {
+        isCurrentActive = true;
+      } else if (currentFile.handle.isSameEntry) {
+        try { isCurrentActive = await currentFile.handle.isSameEntry(handle); } catch (e) { }
+      }
+    }
+
     try {
+      // 1. Try native move (Works for Files and Directories in modern browsers)
+      if (handle.move) {
+        await handle.move(newName);
+
+        // If we renamed the currently open file, update its name in state
+        if (isCurrentActive) {
+          const parts = currentFile.name.split('/');
+          parts.pop();
+          const newDisplayName = parts.length > 0 ? [...parts, newName].join('/') : newName;
+          setCurrentFile(prev => ({ ...prev, name: newDisplayName }));
+        }
+
+        setRefreshTrigger(prev => prev + 1);
+        return;
+      }
+
+      // 2. Fallback: Polyfill for Files or Directories
+      // Resolve parent directory handle from pathPrefix
+      let parent = dirHandle;
+      if (pathPrefix) {
+        const parts = pathPrefix.split('/').filter(p => !!p);
+        for (const part of parts) {
+          parent = await parent.getDirectoryHandle(part);
+        }
+      }
+
       if (handle.kind === 'file') {
-        // Check if file with new name already exists
+        // Check collision
         try {
-          await dirHandle.getFileHandle(newName);
+          await parent.getFileHandle(newName);
           alert('A file with this name already exists.');
           return;
-        } catch (e) {
-          // File does not exist, proceed
+        } catch (e) { /* proceed */ }
+
+        const file = await handle.getFile();
+        const buffer = await file.arrayBuffer();
+
+        const newFileHandle = await parent.getFileHandle(newName, { create: true });
+        const writable = await newFileHandle.createWritable();
+        await writable.write(buffer);
+        await writable.close();
+
+        await parent.removeEntry(handle.name);
+
+        // Update state if currently open
+        if (isCurrentActive) {
+          setFileHandle(newFileHandle);
+          const parts = currentFile.name.split('/');
+          parts.pop();
+          const newDisplayName = parts.length > 0 ? [...parts, newName].join('/') : newName;
+          setCurrentFile(prev => ({ ...prev, name: newDisplayName, handle: newFileHandle }));
         }
 
-        // Native move support (Chrome 111+)
-        if (handle.move) {
-          await handle.move(newName);
-          if (currentFile.handle && currentFile.handle.name === handle.name) {
-            setCurrentFile(prev => ({ ...prev, name: newName }));
-          }
-        } else {
-          // Copy & Delete Polyfill: Read content
-          const file = await handle.getFile();
-          // Read as arrayBuffer to support all file types (images, etc)
-          const buffer = await file.arrayBuffer();
-
-          // Create new file
-          const newFileHandle = await dirHandle.getFileHandle(newName, { create: true });
-          const writable = await newFileHandle.createWritable();
-          await writable.write(buffer);
-          await writable.close();
-
-          // Delete old
-          await dirHandle.removeEntry(handle.name);
-
-          // Update state if currently open
-          if (currentFile.handle && currentFile.handle.name === handle.name) {
-            // We need to switch to the new handle because the old one is invalid
-            setFileHandle(newFileHandle);
-            setCurrentFile(prev => ({ ...prev, name: newName, handle: newFileHandle }));
-          }
-        }
+        setRefreshTrigger(prev => prev + 1);
       } else if (handle.kind === 'directory') {
-        alert('Folder renaming is not fully supported in this version.');
+        // Check collision
+        try {
+          await parent.getDirectoryHandle(newName);
+          alert('A folder with this name already exists.');
+          return;
+        } catch (e) { /* proceed */ }
+
+        const newDirHandle = await parent.getDirectoryHandle(newName, { create: true });
+        await copyDirectory(handle, newDirHandle);
+        await parent.removeEntry(handle.name, { recursive: true });
+        setRefreshTrigger(prev => prev + 1);
       }
-      // Refresh explorer
-      setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error('Rename failed', e);
       alert('Rename failed: ' + e.message);
     }
+  };
+
+  const handleMove = async (handle, targetDirHandle) => {
+    if (!handle || !targetDirHandle) return;
+    try {
+      if (handle.move) {
+        await handle.move(targetDirHandle);
+        setRefreshTrigger(prev => prev + 1);
+      } else {
+        alert('Moving items is not supported in this browser version.');
+      }
+    } catch (e) {
+      console.error('Move failed', e);
+      alert('Move failed: ' + e.message);
+    }
+  };
+
+  const handleExplorerStateChange = (state) => {
+    setProjectMetadata(prev => ({
+      ...prev,
+      explorerState: {
+        ...(prev.explorerState || {}),
+        ...state
+      }
+    }));
+  };
+
+  const handleOrderChange = (parentPath, newOrder) => {
+    setProjectMetadata(prev => {
+      const currentOrder = prev.explorerOrder || {};
+      return {
+        ...prev,
+        explorerOrder: {
+          ...currentOrder,
+          [parentPath]: newOrder
+        }
+      };
+    });
   };
 
   const getDefaultMetadata = (currentMode) => {
@@ -962,8 +1090,17 @@ function App() {
         }
       }
 
-      // If deleted file was open, clear editor
-      if (currentFile.handle && currentFile.handle.name === handle.name) {
+      // If deleted file (or a folder containing it) was open, clear editor
+      let isActiveDeleted = false;
+      if (currentFile.handle) {
+        if (currentFile.handle === handle) {
+          isActiveDeleted = true;
+        } else if (currentFile.handle.isSameEntry) {
+          try { isActiveDeleted = await currentFile.handle.isSameEntry(handle); } catch (e) { }
+        }
+      }
+
+      if (isActiveDeleted) {
         setContent('');
         setPreviewContent('');
         setMetadata({});
@@ -991,6 +1128,11 @@ function App() {
       onCreateFile={handleCreateFile}
       onCreateFolder={handleCreateFolder}
       refreshTrigger={refreshTrigger}
+      initialExpandedFolders={(projectMetadata.explorerState && projectMetadata.explorerState.expandedFolders) || {}}
+      onExplorerStateChange={handleExplorerStateChange}
+      onMove={handleMove}
+      customOrder={projectMetadata.explorerOrder || {}}
+      onOrderChange={handleOrderChange}
     />
   );
 
@@ -1074,7 +1216,16 @@ function App() {
           onNew={handleNew}
           onExport={handleExport}
           onImport={handleImport}
-          filename={currentFile.name}
+          onOpenMetadata={async () => {
+            if (!dirHandle) return;
+            try {
+              const handle = await dirHandle.getFileHandle('project_metadata.json');
+              handleFileSelect(handle, 'project_metadata.json');
+            } catch (e) {
+              alert('Project metadata file not found.');
+            }
+          }}
+          filename={currentFile.name ? currentFile.name.split('/').pop() : ''}
           projectName={projectMetadata.name}
           mode={mode}
           onProjectNameChange={(name) => setProjectMetadata({ ...projectMetadata, name })}
@@ -1082,6 +1233,17 @@ function App() {
           toggleExplorer={() => setShowExplorer(!showExplorer)}
           onLogoClick={goToWelcome}
           onOpenSettings={() => setShowSettingsModal(true)}
+          onRename={(newName) => {
+            if (currentFile.name === 'project_metadata.json') {
+              alert('The project metadata file cannot be renamed.');
+              setRefreshTrigger(prev => prev + 1); // Reset input
+              return;
+            }
+            const parts = currentFile.name.split('/');
+            parts.pop();
+            const prefix = parts.join('/');
+            handleRename(currentFile.handle, newName, prefix);
+          }}
         >
           {showSettingsModal && (
             <SettingsModal
