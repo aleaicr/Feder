@@ -47,18 +47,21 @@
 }
 
 .semi-light {
-  /* Colors - Semi Light (Sandstone) - Warm, paper-like and comfortable */
-  --bg-app: #c5c1bb;
-  --bg-panel: #ddd8d0;
-  --text-primary: #2c2b2a;
-  --text-secondary: #575553;
-  --border-color: #b8b3ac;
-  --accent-color: #7d674c;
-  /* Subtle Bronze/Leather */
-  --accent-hover: #9c815f;
-  --toolbar-bg: #ddd8d0;
-  --hover-bg: rgba(0, 0, 0, 0.08);
+  /* Colors - Semi Light (Deep Kraft / Dark Parchment) - A solid mid-tone for glare-free reading */
+  --bg-app: #a89f91;
+  --bg-panel: #c5bbac;
+  --text-primary: #26201b;
+  --text-secondary: #594a42;
+  --border-color: #998e7e;
+  --accent-color: #795548;
+  /* Classic Leather */
+  --accent-color-rgb: 121, 85, 72;
+  --accent-hover: #5d4037;
+  --toolbar-bg: #c5bbac;
+  --hover-bg: rgba(38, 32, 27, 0.08);
+  /* Espresso tint */
 }
+
 
 body {
   margin: 0;

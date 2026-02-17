@@ -21,7 +21,8 @@ export function Layout({
     toggleExplorer,
     onLogoClick,
     onOpenSettings,
-    onRename
+    onRename,
+    statusBar
 }) {
     const [fileNameInput, setFileNameInput] = React.useState(filename || '');
 
@@ -136,6 +137,8 @@ export function Layout({
             <main className="layout-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                 {children}
             </main>
+
+            {statusBar}
         </div>
     );
 }

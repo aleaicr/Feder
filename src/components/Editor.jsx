@@ -1,8 +1,21 @@
-import React, { useRef } from 'react';
-import { Bold, Italic, Underline, Heading1, Heading2, Image, Link, List, Quote, Code, ImagePlus } from 'lucide-react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { Bold, Italic, Underline, Heading1, Heading2, Image, Link, List, Quote, Code, ImagePlus, Sparkles } from 'lucide-react';
+import { requestInlineSuggestion } from '../utils/aiSuggestions';
 
-export function Editor({ value, onChange, mode, onUploadImage }) {
+export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThinking, onRegisterCancel }) {
     const textareaRef = useRef(null);
+    const mirrorRef = useRef(null);
+    const ghostRef = useRef(null);
+
+    const debounceRef = useRef(null);
+    const abortRef = useRef(null);
+    const lastContextRef = useRef('');
+    const cursorRef = useRef({ start: 0, end: 0 });
+
+    const [suggestion, setSuggestion] = useState('');
+    const [isSuggesting, setIsSuggesting] = useState(false);
+    const [cursorVersion, setCursorVersion] = useState(0);
+    const [caretPos, setCaretPos] = useState({ top: 0, left: 0 });
 
     const insertText = (before, after = '') => {
         const textarea = textareaRef.current;
@@ -39,6 +52,103 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
         }
     };
 
+    const updateCursor = useCallback(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        cursorRef.current = {
+            start: textarea.selectionStart || 0,
+            end: textarea.selectionEnd || 0
+        };
+        setCursorVersion((v) => v + 1);
+    }, []);
+
+    const updateCaretPosition = useCallback(() => {
+        const textarea = textareaRef.current;
+        const mirror = mirrorRef.current;
+        if (!textarea || !mirror) return;
+
+        const computed = window.getComputedStyle(textarea);
+
+        // Copy all font/text properties
+        const properties = [
+            'direction',
+            'boxSizing',
+            'width',
+            'height',
+            'overflowX',
+            'overflowY',
+            'borderTopWidth',
+            'borderRightWidth',
+            'borderBottomWidth',
+            'borderLeftWidth',
+            'borderStyle',
+            'paddingTop',
+            'paddingRight',
+            'paddingBottom',
+            'paddingLeft',
+            'fontStyle',
+            'fontVariant',
+            'fontWeight',
+            'fontStretch',
+            'fontSize',
+            'fontSizeAdjust',
+            'lineHeight',
+            'fontFamily',
+            'textAlign',
+            'textTransform',
+            'textIndent',
+            'textDecoration',
+            'letterSpacing',
+            'wordSpacing',
+            'tabSize',
+            'MozTabSize'
+        ];
+
+        properties.forEach(prop => {
+            mirror.style[prop] = computed[prop];
+        });
+
+        // Specific overrides for the mirror to ensure it behaves as a measurement tool
+        mirror.style.position = 'absolute';
+        mirror.style.top = '0';
+        mirror.style.left = '0';
+        mirror.style.visibility = 'hidden';
+        mirror.style.width = `${textarea.clientWidth}px`; // Match inner width (no scrollbar)
+        mirror.style.border = 'none'; // Since we use clientWidth, we don't want borders on mirror
+        mirror.style.boxSizing = 'border-box'; // Ensure padding is included in width
+
+        const caret = cursorRef.current.start || 0;
+        const prefix = textarea.value.substring(0, caret);
+
+        mirror.textContent = prefix;
+        const span = document.createElement('span');
+        span.textContent = '\u200b'; // Zero-width space
+        mirror.appendChild(span);
+
+        // Sync scroll
+        mirror.scrollTop = textarea.scrollTop;
+        mirror.scrollLeft = textarea.scrollLeft;
+
+        // Calculate coordinates relative to the textarea wrapper
+        const top = span.offsetTop + parseInt(computed.borderTopWidth) - textarea.scrollTop;
+        const left = span.offsetLeft + parseInt(computed.borderLeftWidth) - textarea.scrollLeft;
+
+        setCaretPos({ top, left });
+    }, []);
+
+    useEffect(() => {
+        updateCursor();
+    }, [updateCursor]);
+
+    const acceptSuggestion = useCallback(() => {
+        if (!suggestion) return;
+        // Strip leading ellipses if they still appear
+        const cleaned = suggestion.replace(/^\s*\.\.\.\s*/, '');
+        insertText(cleaned, '');
+        setSuggestion('');
+    }, [suggestion]);
+
+
     const handleImageUpload = async () => {
         if (!onUploadImage) return;
         try {
@@ -51,7 +161,126 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
         }
     };
 
+    useEffect(() => {
+        updateCaretPosition();
+    }, [value, cursorVersion, suggestion, updateCaretPosition]);
+
+    // AI Suggestion Logic
+    const fetchSuggestion = useCallback(async () => {
+        const ai = settings && settings.ai ? settings.ai : null;
+        if (!ai || !ai.enabled) {
+            setSuggestion('');
+            if (onAiThinking) onAiThinking(false);
+            setIsSuggesting(false);
+            return;
+        }
+
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const { start, end } = cursorRef.current;
+        if (start !== end) {
+            setSuggestion('');
+            if (onAiThinking) onAiThinking(false);
+            setIsSuggesting(false);
+            return;
+        }
+
+        const prefix = value.slice(0, start);
+        const suffix = value.slice(end);
+
+        if (!prefix.trim() || prefix.length < 5) {
+            setSuggestion('');
+            if (onAiThinking) onAiThinking(false);
+            setIsSuggesting(false);
+            return;
+        }
+
+        const contextKey = `${prefix.slice(-100)}|${mode}`;
+        if (contextKey === lastContextRef.current) return;
+        lastContextRef.current = contextKey;
+
+        if (abortRef.current) abortRef.current.abort();
+
+        setIsSuggesting(true);
+        if (onAiThinking) onAiThinking(true);
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        try {
+            const suggestionText = await requestInlineSuggestion({
+                settings,
+                prefix: prefix.slice(-3000),
+                suffix: suffix.slice(0, 1000),
+                mode,
+                signal: controller.signal
+            });
+            if (!controller.signal.aborted) {
+                if (suggestionText) {
+                    setSuggestion(suggestionText);
+                } else {
+                    setSuggestion('');
+                }
+            }
+        } catch (e) {
+            if (e.name !== 'AbortError') {
+                console.error('AI Suggestion Error:', e);
+            }
+            if (!controller.signal.aborted) setSuggestion('');
+        } finally {
+            if (!controller.signal.aborted) {
+                setIsSuggesting(false);
+                if (onAiThinking) onAiThinking(false);
+            }
+        }
+    }, [value, mode, settings, onAiThinking]);
+
+
+    // Automatic Trigger Effect
+    useEffect(() => {
+        const ai = settings?.ai;
+        if (!ai || !ai.enabled || ai.triggerMode === 'manual') {
+            return;
+        }
+
+        const debounceMs = ai.debounceMs || 1000; // Default to 1s if not set, user asked for "X second"
+
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
+        // Only trigger if we have changes (cursorVersion or value)
+        debounceRef.current = setTimeout(() => {
+            fetchSuggestion();
+        }, debounceMs);
+
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [value, cursorVersion, fetchSuggestion, settings?.ai]);
+
+    useEffect(() => {
+        if (onRegisterCancel) {
+            onRegisterCancel(() => {
+                if (abortRef.current) abortRef.current.abort();
+                setIsSuggesting(false);
+                if (onAiThinking) onAiThinking(false);
+                setSuggestion('');
+                lastContextRef.current = ''; // Reset context so it can be re-triggered
+            });
+        }
+    }, [onRegisterCancel, onAiThinking]);
+
+    useEffect(() => {
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            if (abortRef.current) abortRef.current.abort();
+            if (onAiThinking) onAiThinking(false);
+        };
+    }, [onAiThinking]);
+
+
     return (
+
         <div className="panel-editor">
             {/* Toolbar */}
             <div className="editor-toolbar">
@@ -69,6 +298,10 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
                 <ToolBtn icon={<Link size={18} />} onClick={() => insertText('[', '](url)')} title="Link" />
                 <ToolBtn icon={<Image size={18} />} onClick={() => insertText('![alt]', '(src){width=100%}')} title="Image (Text)" />
                 <ToolBtn icon={<ImagePlus size={18} />} onClick={handleImageUpload} title="Upload Image" />
+                <div className="divider"></div>
+                {settings?.ai?.enabled && (
+                    <ToolBtn icon={<Sparkles size={18} />} onClick={() => { lastContextRef.current = ''; fetchSuggestion(); }} title="Trigger AI (Ctrl+Space)" />
+                )}
                 {/* Researcher Mode Tools */}
                 {mode === 'researcher' && (
                     <ToolBtn label="Cite" onClick={() => insertText('[@', ']')} title="Insert Citation" />
@@ -77,14 +310,54 @@ export function Editor({ value, onChange, mode, onUploadImage }) {
 
             {/* Text Area */}
             <div className="textarea-wrapper">
+                {/* Mirror for logic only */}
+                <div ref={mirrorRef} className="textarea-mirror" aria-hidden="true" />
+
+                {/* Ghost Overlay for AI Suggestions */}
+                <div ref={ghostRef} className="ghost-overlay" aria-hidden="true">
+                    {value.substring(0, cursorRef.current?.start || 0)}
+                    {suggestion && <span className="suggestion">{suggestion}</span>}
+                </div>
+
                 <textarea
                     ref={textareaRef}
                     value={value}
-                    onChange={(e) => onChange(e.target.value)}
+                    onChange={(e) => {
+                        setSuggestion(''); // Clear on type
+                        onChange(e.target.value);
+                    }}
                     className="main-textarea"
                     placeholder="# Start writing..."
                     spellCheck="false"
+                    onKeyDown={(e) => {
+                        if (suggestion && e.key === 'Tab') {
+                            e.preventDefault();
+                            acceptSuggestion();
+                        }
+                        if (suggestion && e.key === 'Escape') {
+                            e.preventDefault();
+                            setSuggestion('');
+                        }
+                        /* Allow Ctrl+RightArrow but maybe standard navigation handles it? 
+                           If we want partial accept, that's complex. */
+                        if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
+                            e.preventDefault();
+                            lastContextRef.current = '';
+                            fetchSuggestion();
+                        }
+                    }}
+                    onKeyUp={updateCursor}
+                    onClick={updateCursor}
+                    onSelect={updateCursor}
+                    onScroll={(e) => {
+                        updateCaretPosition();
+                        if (ghostRef.current) {
+                            ghostRef.current.scrollTop = e.target.scrollTop;
+                            ghostRef.current.scrollLeft = e.target.scrollLeft;
+                        }
+                    }}
                     onDragOver={(e) => {
+
                         e.preventDefault();
                         e.stopPropagation();
                     }}

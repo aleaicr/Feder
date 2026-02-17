@@ -270,7 +270,7 @@ const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, a
     );
 };
 
-function PreviewComponent({ content, metadata, projectMetadata, dirHandle, mode, onUpdateContent, onUpdateMetadata }) {
+function PreviewComponent({ content, metadata, projectMetadata, dirHandle, mode, onUpdateContent, onUpdateMetadata, paperView }) {
     const [coverOpen, setCoverOpen] = useState(true);
     const [tocOpen, setTocOpen] = useState(true);
 
@@ -420,8 +420,9 @@ function PreviewComponent({ content, metadata, projectMetadata, dirHandle, mode,
 
     return (
         <div
-            className={`panel-preview ${isResearch ? 'research-mode' : ''} ${isEngineer ? 'engineer-mode' : ''} ${isScript ? 'script-mode' : ''} ${isScholar ? 'scholar-mode' : ''} ${isJournalist ? 'journalist-mode' : ''}`}
+            className={`panel-preview ${paperView ? 'paper-view-active' : ''} ${isResearch ? 'research-mode' : ''} ${isEngineer ? 'engineer-mode' : ''} ${isScript ? 'script-mode' : ''} ${isScholar ? 'scholar-mode' : ''} ${isJournalist ? 'journalist-mode' : ''}`}
             style={{
+
                 '--scholar-accent': activeAccentColor,
                 '--scholar-accent-rgb': hexToRgb(activeAccentColor)
             }}

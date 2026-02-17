@@ -221,7 +221,70 @@
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    /* Wrapper handles layout */
 }
+
+.textarea-mirror {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 32px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.ghost-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 32px;
+    /* Match textarea padding exactly */
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    pointer-events: none;
+    z-index: 5;
+    background: transparent;
+    color: transparent;
+    overflow: hidden;
+    /* Scroll synced via JS */
+}
+
+.ghost-overlay .suggestion {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+/* Old inline class - kept for reference or removal */
+.inline-suggestion {
+    display: none;
+}
+
+.inline-suggestion-hint {
+    position: absolute;
+    right: 16px;
+    bottom: 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 20;
+}
+
 
 .main-textarea {
     flex: 1;
@@ -939,4 +1002,217 @@
 
 .journal-layout .prose p {
     margin-bottom: 1.5rem;
+}
+
+/* StatusBar.css (Included in App.css) */
+
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 22px;
+    background-color: var(--header-bg);
+    border-top: 1px solid var(--border-color);
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 0 8px;
+    user-select: none;
+    font-family: 'Consolas', 'Menlo', monospace;
+    /* IDE-like feel */
+    z-index: 1100;
+}
+
+
+.status-group {
+    display: flex;
+    align-items: center;
+}
+
+.status-item-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    height: 22px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.status-item:hover {
+    background-color: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.status-item span {
+    white-space: nowrap;
+}
+
+.status-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* AI Status Styling */
+.ai-status {
+    position: relative;
+    min-width: 80px;
+}
+
+.ai-status.thinking {
+    color: var(--accent-color);
+}
+
+.ai-status.thinking .status-icon svg {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ai-status.disabled {
+    opacity: 0.6;
+}
+
+.cancel-ai-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: 4px;
+    padding: 0;
+    transition: all 0.2s;
+}
+
+.cancel-ai-btn:hover {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* Notification dot */
+.status-item.notification-bell {
+    position: relative;
+    width: 20px;
+    justify-content: center;
+}
+
+/* Mini Panel Popup */
+.mini-panel-popup {
+    position: absolute;
+    bottom: 28px;
+    /* Above status bar */
+    left: 0;
+    width: 300px;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mini-panel-popup label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    display: block;
+}
+
+.mini-panel-popup select,
+.mini-panel-popup input {
+    width: 100%;
+    background: var(--bg-app);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.mini-panel-popup .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.mini-panel-popup .btn-small {
+    padding: 2px 8px;
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.mini-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 999;
+    background: transparent;
+}
+
+.mini-panel-popup .btn-icon-small {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 2px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.mini-panel-popup .btn-icon-small:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+/* Paper View Toggle */
+.panel-preview.paper-view-active {
+    background-color: #ffffff !important;
+}
+
+.panel-preview.paper-view-active .preview-content {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+}
+
+.panel-preview.paper-view-active .preview-content p,
+.panel-preview.paper-view-active .preview-content span,
+.panel-preview.paper-view-active .preview-content h1,
+.panel-preview.paper-view-active .preview-content h2,
+.panel-preview.paper-view-active .preview-content h3,
+.panel-preview.paper-view-active .preview-content h4,
+.panel-preview.paper-view-active .preview-content li,
+.panel-preview.paper-view-active .preview-content blockquote {
+    color: #000000 !important;
 }

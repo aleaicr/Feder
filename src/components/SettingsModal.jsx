@@ -1,18 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { X, Monitor, AlignJustify, FolderOpen, Book } from 'lucide-react';
 
-export function SettingsModal({ onClose, metadata, onUpdate, mode }) {
+export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onUpdateSettings }) {
     const [localMeta, setLocalMeta] = useState(metadata || {});
+    const [localSettings, setLocalSettings] = useState(settings || {});
 
     useEffect(() => {
         setLocalMeta(metadata || {});
     }, [metadata]);
+
+    useEffect(() => {
+        setLocalSettings(settings || {});
+    }, [settings]);
 
     const handleChange = (key, value) => {
         const updated = { ...localMeta, [key]: value };
         setLocalMeta(updated);
         onUpdate(updated);
     };
+
+    const handleAIChange = (path, value) => {
+        const updatedAI = { ...(localSettings.ai || {}) };
+        let cursor = updatedAI;
+        for (let i = 0; i < path.length - 1; i += 1) {
+            const key = path[i];
+            cursor[key] = { ...(cursor[key] || {}) };
+            cursor = cursor[key];
+        }
+        cursor[path[path.length - 1]] = value;
+
+        const updated = { ...localSettings, ai: updatedAI };
+        setLocalSettings(updated);
+        if (onUpdateSettings) onUpdateSettings(updated);
+    };
+
+
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -49,6 +71,173 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode }) {
                                     > On Save </button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* section: AI Assist */}
+                    <div className="settings-section">
+                        <div className="section-label">
+                            <AlignJustify size={16} />
+                            <span>AI Assist</span>
+                        </div>
+                        <div className="settings-card">
+                            <div className="setting-row">
+                                <div className="setting-info">
+                                    <span className="setting-name">Inline Suggestions</span>
+                                    <span className="setting-desc">Fast inline text continuations while typing</span>
+                                </div>
+                                <label className="switch">
+                                    <input
+                                        type="checkbox"
+                                        checked={localSettings.ai?.enabled || false}
+                                        onChange={(e) => handleAIChange(['enabled'], e.target.checked)}
+                                    />
+                                    <span className="slider round"></span>
+                                </label>
+                            </div>
+
+                            {localSettings.ai?.enabled && (
+                                <div style={{ marginTop: 20 }}>
+                                    {/* 1. Provider Selection */}
+                                    <div className="setting-input-group">
+                                        <label>Provider</label>
+                                        <select
+                                            value={localSettings.ai?.provider || 'gemini'}
+                                            onChange={(e) => handleAIChange(['provider'], e.target.value)}
+                                            className="form-input"
+                                        >
+                                            <option value="gemini">Google Gemini (Recommended)</option>
+                                            <option value="openai">OpenAI (Cloud)</option>
+                                            <option value="ollama">Ollama (Local)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* 2. Provider Specific Settings */}
+                                    {(localSettings.ai?.provider === 'gemini' || !localSettings.ai?.provider) && (
+                                        <div className="setting-input-group" style={{ marginTop: 12 }}>
+                                            <label>Gemini Configuration</label>
+                                            <div className="input-with-icon">
+                                                <input
+                                                    type="password"
+                                                    value={localSettings.ai?.gemini?.apiKey || ''}
+                                                    onChange={(e) => handleAIChange(['gemini', 'apiKey'], e.target.value)}
+                                                    placeholder="Gemini API Key"
+                                                />
+                                            </div>
+                                            <div className="input-with-icon" style={{ marginTop: 8 }}>
+                                                <select
+                                                    value={localSettings.ai?.gemini?.model || 'gemini-2.5-flash'}
+                                                    onChange={(e) => handleAIChange(['gemini', 'model'], e.target.value)}
+                                                    className="form-input"
+                                                >
+                                                    <option value="gemini-2.5-flash">gemini-2.5-flash (Fastest)</option>
+                                                    <option value="gemini-2.5-pro">gemini-2.5-pro (High Quality)</option>
+                                                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {localSettings.ai?.provider === 'openai' && (
+                                        <div className="setting-input-group" style={{ marginTop: 12 }}>
+                                            <label>OpenAI Configuration</label>
+                                            <div className="input-with-icon">
+                                                <input
+                                                    type="password"
+                                                    value={localSettings.ai?.openai?.apiKey || ''}
+                                                    onChange={(e) => handleAIChange(['openai', 'apiKey'], e.target.value)}
+                                                    placeholder="OpenAI API Key"
+                                                />
+                                            </div>
+                                            <div className="input-with-icon" style={{ marginTop: 8 }}>
+                                                <select
+                                                    value={localSettings.ai?.openai?.model || 'gpt-4o-mini'}
+                                                    onChange={(e) => handleAIChange(['openai', 'model'], e.target.value)}
+                                                    className="form-input"
+                                                >
+                                                    <option value="gpt-4o-mini">gpt-4o-mini (Fast & Cheap)</option>
+                                                    <option value="gpt-4o">gpt-4o (High Quality)</option>
+                                                    <option value="gpt-4.5-preview">gpt-4.5-preview</option>
+                                                    <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {localSettings.ai?.provider === 'ollama' && (
+                                        <div className="setting-input-group" style={{ marginTop: 12 }}>
+                                            <label>Ollama Configuration</label>
+                                            <div className="input-with-icon">
+                                                <input
+                                                    type="text"
+                                                    value={localSettings.ai?.ollama?.baseUrl || 'http://localhost:11434'}
+                                                    onChange={(e) => handleAIChange(['ollama', 'baseUrl'], e.target.value)}
+                                                    placeholder="http://localhost:11434"
+                                                />
+                                            </div>
+                                            <div className="input-with-icon" style={{ marginTop: 8 }}>
+                                                <input
+                                                    type="text"
+                                                    value={localSettings.ai?.ollama?.model || 'llama3.1:8b'}
+                                                    onChange={(e) => handleAIChange(['ollama', 'model'], e.target.value)}
+                                                    placeholder="Model name (e.g., llama3.1:8b)"
+                                                    className="form-input"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Trigger Mode */}
+                                    <div className="setting-input-group" style={{ marginTop: 16 }}>
+                                        <label>Trigger Mode</label>
+                                        <div className="segmented-control" style={{ width: 'fit-content' }}>
+                                            <button
+                                                className={localSettings.ai?.triggerMode === 'automatic' || !localSettings.ai?.triggerMode ? 'active' : ''}
+                                                onClick={() => handleAIChange(['triggerMode'], 'automatic')}
+                                            > Automatic (On Pause) </button>
+                                            <button
+                                                className={localSettings.ai?.triggerMode === 'manual' ? 'active' : ''}
+                                                onClick={() => handleAIChange(['triggerMode'], 'manual')}
+                                            > Manual (Shortcut) </button>
+                                        </div>
+                                        <span className="setting-desc" style={{ marginTop: 4, display: 'block' }}>
+                                            {localSettings.ai?.triggerMode === 'manual'
+                                                ? "AI only triggers on Ctrl+Space or toolbar button."
+                                                : "AI triggers automatically when you pause typing."}
+                                        </span>
+                                    </div>
+
+                                    {/* 3. General Configuration (Bottom) */}
+                                    <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                                        <div className="setting-input-group" style={{ flex: 1 }}>
+                                            <label>Max Words</label>
+                                            <input
+                                                type="number"
+                                                min="5"
+                                                max="100"
+                                                value={localSettings.ai?.maxWords || 12}
+                                                onChange={(e) => handleAIChange(['maxWords'], Number(e.target.value))}
+                                                className="form-input"
+                                            />
+                                        </div>
+                                        <div className="setting-input-group" style={{ flex: 1 }}>
+                                            <label>Auto-trigger Delay (seconds)</label>
+                                            <input
+                                                type="number"
+                                                min="0.2"
+                                                max="5"
+                                                step="0.1"
+                                                value={(localSettings.ai?.debounceMs || 1000) / 1000}
+                                                onChange={(e) => handleAIChange(['debounceMs'], Number(e.target.value) * 1000)}
+                                                className="form-input"
+                                            />
+                                        </div>
+
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
                     </div>
 
@@ -93,7 +282,7 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode }) {
                                             <FolderOpen size={14} className="input-icon" />
                                             <input
                                                 type="text"
-                                                value={localMeta.figuresFolder || 'figures'}
+                                                value={localMeta.figuresFolder !== undefined ? localMeta.figuresFolder : 'figures'}
                                                 onChange={e => handleChange('figuresFolder', e.target.value)}
                                                 placeholder="figures"
                                             />
@@ -105,7 +294,7 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode }) {
                                             <Book size={14} className="input-icon" />
                                             <input
                                                 type="text"
-                                                value={localMeta.bibFile || 'references.bib'}
+                                                value={localMeta.bibFile !== undefined ? localMeta.bibFile : 'references.bib'}
                                                 onChange={e => handleChange('bibFile', e.target.value)}
                                                 placeholder="references.bib"
                                             />

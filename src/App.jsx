@@ -15,6 +15,7 @@ import { generateLatex } from './utils/latexExport';
 import { saveProjectHandle, getProjectHandle, saveRecentProject, getRecentProjects, saveSettings, getSettings, saveRecentList } from './utils/db';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { SettingsModal } from './components/SettingsModal';
+import { StatusBar } from './components/StatusBar';
 
 const isElectron = /Electron/i.test(navigator.userAgent);
 
@@ -33,9 +34,41 @@ function App() {
   const [recentProjects, setRecentProjects] = useState([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
-  const [settings, setSettings] = useState({ name: '', affiliation: '', company: '', profession: '', email: '', phone: '' });
+  const [isAiThinking, setIsAiThinking] = useState(false);
+  const [paperView, setPaperView] = useState(false);
+  const [settings, setSettings] = useState({
+
+    name: '',
+    affiliation: '',
+    company: '',
+    profession: '',
+    email: '',
+    phone: '',
+    ai: {
+      enabled: false,
+      provider: 'openai',
+      maxChars: 120,
+      debounceMs: 400,
+      openai: {
+        enabled: true,
+        apiKey: '',
+        model: 'gpt-4o-mini'
+      },
+      ollama: {
+        enabled: false,
+        baseUrl: 'http://localhost:11434',
+        model: 'llama3.1:8b'
+      },
+      gemini: {
+        enabled: false,
+        apiKey: '',
+        model: 'gemini-1.5-flash'
+      }
+    }
+  });
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const cancelAiRef = React.useRef(null);
 
   const {
     fileHandle,
@@ -129,11 +162,14 @@ function App() {
     // If we have a path (Electron) but no valid handle (after restart in IDB), fix it.
     let activeHandle = project.handle;
 
-    if (window.electronAPI && window.electronAPI.isElectron && project.path) {
+    // Use path from top-level property OR handle property if available (for robustness)
+    const projectPath = project.path || (project.handle && project.handle.path);
+
+    if (window.electronAPI && window.electronAPI.isElectron && projectPath) {
       // Reconstruct handle from path
       try {
         const { getElectronHandle } = await import('./utils/electronFileSystem');
-        activeHandle = getElectronHandle(project.path, project.name);
+        activeHandle = getElectronHandle(projectPath, project.name);
       } catch (e) {
         console.error('Failed to restore Electron handle', e);
       }
@@ -1155,6 +1191,9 @@ function App() {
             onChange={setContent}
             mode={mode}
             onUploadImage={onUploadImage}
+            settings={settings}
+            onAiThinking={setIsAiThinking}
+            onRegisterCancel={(fn) => { cancelAiRef.current = fn; }}
           />
         </div>
       )}
@@ -1173,7 +1212,9 @@ function App() {
       projectMetadata={projectMetadata}
       dirHandle={dirHandle}
       mode={mode}
+      paperView={paperView}
       onUpdateContent={handleUpdateFromPreview}
+
       onUpdateMetadata={setMetadata}
     />
   );
@@ -1244,6 +1285,24 @@ function App() {
             const prefix = parts.join('/');
             handleRename(currentFile.handle, newName, prefix);
           }}
+          statusBar={
+            <StatusBar
+              settings={settings}
+              isAiThinking={isAiThinking}
+              onCancelAi={() => { if (cancelAiRef.current) cancelAiRef.current(); }}
+              projectMetadata={projectMetadata}
+              onOpenSettings={() => setShowSettingsModal(true)}
+              onUpdateSettings={async (newSettings) => {
+                setSettings(newSettings);
+                await saveSettings(newSettings);
+              }}
+              onUpdateProjectMetadata={handleUpdateProjectSettings}
+              wordCount={content ? content.trim().split(/\s+/).filter(w => w).length : 0}
+              paperView={paperView}
+              onTogglePaperView={() => setPaperView(!paperView)}
+            />
+
+          }
         >
           {showSettingsModal && (
             <SettingsModal
@@ -1251,6 +1310,11 @@ function App() {
               metadata={projectMetadata}
               onUpdate={handleUpdateProjectSettings}
               onClose={() => setShowSettingsModal(false)}
+              settings={settings}
+              onUpdateSettings={async (newSettings) => {
+                setSettings(newSettings);
+                await saveSettings(newSettings);
+              }}
             />
           )}
 
