@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cpu, Zap, AlignCenter, AlignJustify, Save, Activity, Settings, X, Check, FileText, Square } from 'lucide-react';
+import { Cpu, Zap, AlignCenter, AlignJustify, Save, Activity, Settings, X, Check, FileText, Square, HelpCircle } from 'lucide-react';
 
 
 export function StatusBar({
@@ -18,52 +18,51 @@ export function StatusBar({
     const [showAiPanel, setShowAiPanel] = useState(false);
 
     // Derived state
-    const ai = settings?.ai || {};
-    const enabled = ai.enabled;
-    const provider = ai.provider || 'gemini';
-    const currentModel = ai[provider]?.model || '';
-    const currentKey = ai[provider]?.apiKey || '';
-    const currentBaseUrl = ai[provider]?.baseUrl || '';
-    const triggerMode = ai.triggerMode || 'automatic';
-    const debounceMs = ai.debounceMs || 1000;
+    const aiConfig = projectMetadata?.aiConfig || {};
+    const aiGlobal = settings?.ai || {};
+
+    const enabled = aiGlobal.enabled; // Toggle is still global for now (app feature)
+    const provider = aiConfig.provider || 'gemini';
+    const triggerMode = aiConfig.triggerMode || 'automatic';
+    const debounceMs = aiConfig.debounceMs || 1000;
+
+    // Config values from Project Meta
+    const currentModel = aiConfig[provider]?.model || (provider === 'gemini' ? 'gemini-2.5-flash-lite (recommended)' : (provider === 'ollama' ? 'gemma3:4b (recommended)' : ''));
+    const currentBaseUrl = aiConfig[provider]?.baseUrl || '';
+
+    // Sensitive values from Global Settings
+    const currentKey = aiGlobal[provider]?.apiKey || '';
 
     const handleTriggerModeChange = (val) => {
-        const updatedAi = { ...ai, triggerMode: val };
-        onUpdateSettings({ ...settings, ai: updatedAi });
+        onUpdateProjectMetadata({ ...projectMetadata, aiConfig: { ...aiConfig, triggerMode: val } });
     };
 
     const handleDebounceChange = (val) => {
         const ms = parseInt(val, 10);
-        const updatedAi = { ...ai, debounceMs: isNaN(ms) ? 1000 : ms };
-        onUpdateSettings({ ...settings, ai: updatedAi });
+        onUpdateProjectMetadata({ ...projectMetadata, aiConfig: { ...aiConfig, debounceMs: isNaN(ms) ? 1000 : ms } });
     };
 
     const handleProviderChange = (newProvider) => {
-        const updatedAi = { ...ai, provider: newProvider };
-        onUpdateSettings({ ...settings, ai: updatedAi });
+        onUpdateProjectMetadata({ ...projectMetadata, aiConfig: { ...aiConfig, provider: newProvider } });
     };
 
     const handleModelChange = (val) => {
-        const updatedProviderConfig = { ...(ai[provider] || {}), model: val };
-        const updatedAi = { ...ai, [provider]: updatedProviderConfig };
-        onUpdateSettings({ ...settings, ai: updatedAi });
+        const updatedProviderConfig = { ...(aiConfig[provider] || {}), model: val };
+        onUpdateProjectMetadata({ ...projectMetadata, aiConfig: { ...aiConfig, [provider]: updatedProviderConfig } });
     };
 
     const handleKeyChange = (val) => {
-        const updatedProviderConfig = { ...(ai[provider] || {}), apiKey: val };
-        const updatedAi = { ...ai, [provider]: updatedProviderConfig };
-        onUpdateSettings({ ...settings, ai: updatedAi });
+        const updatedAiGlobal = { ...aiGlobal, [provider]: { ...(aiGlobal[provider] || {}), apiKey: val } };
+        onUpdateSettings({ ...settings, ai: updatedAiGlobal });
     };
 
     const handleUrlChange = (val) => {
-        const updatedProviderConfig = { ...(ai[provider] || {}), baseUrl: val };
-        const updatedAi = { ...ai, [provider]: updatedProviderConfig };
-        onUpdateSettings({ ...settings, ai: updatedAi });
+        const updatedProviderConfig = { ...(aiConfig[provider] || {}), baseUrl: val };
+        onUpdateProjectMetadata({ ...projectMetadata, aiConfig: { ...aiConfig, [provider]: updatedProviderConfig } });
     };
 
     const toggleAi = () => {
-        const updatedAi = { ...ai, enabled: !enabled };
-        onUpdateSettings({ ...settings, ai: updatedAi });
+        onUpdateSettings({ ...settings, ai: { ...aiGlobal, enabled: !enabled } });
     };
 
 
@@ -165,6 +164,7 @@ export function StatusBar({
                                                 step="0.1"
                                                 min="0.2"
                                                 max="5"
+                                                className="clean-number"
                                             />
                                         </div>
                                     )}
@@ -177,13 +177,57 @@ export function StatusBar({
                                     <option value="ollama">Ollama (Local)</option>
                                 </select>
 
-                                <label>Model</label>
-                                <input
-                                    type="text"
-                                    value={currentModel}
-                                    onChange={e => handleModelChange(e.target.value)}
-                                    placeholder="e.g. gpt-4o-mini, llama3"
-                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <label>Model</label>
+                                    {provider === 'ollama' && (
+                                        <button
+                                            className="btn-icon-small"
+                                            onClick={() => {
+                                                const url = 'https://github.com/CodexFabrica/Feder/blob/main/docs/README_local_AI_assist.md';
+                                                if (window.electronAPI && window.electronAPI.openExternal) {
+                                                    window.electronAPI.openExternal(url);
+                                                } else {
+                                                    window.open(url, '_blank');
+                                                }
+                                            }}
+                                            title="Learn how to use local models"
+                                            style={{ color: 'var(--accent-color)', padding: '0 4px' }}
+                                        >
+                                            <HelpCircle size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                                {provider === 'ollama' ? (
+                                    <input
+                                        type="text"
+                                        value={currentModel}
+                                        onChange={e => handleModelChange(e.target.value)}
+                                        placeholder="e.g. gemma3:4b (recommended)"
+                                    />
+                                ) : (
+                                    <select
+                                        value={currentModel}
+                                        onChange={e => handleModelChange(e.target.value)}
+                                    >
+                                        {provider === 'gemini' && [
+                                            'gemini-2.5-flash-lite (recommended)',
+                                            'gemini-3-flash-preview',
+                                            'gemini-3-pro-preview',
+                                            'gemini-2.5-flash',
+                                            'gemini-2.5-pro'
+                                        ].map(m => <option key={m} value={m}>{m}</option>)}
+
+                                        {provider === 'openai' && [
+                                            'gpt-5.2-chat-latest',
+                                            'gpt-5-1-chat-latest',
+                                            'gpt-5-mini',
+                                            'gpt-5-nano',
+                                            'gpt-4.1-nano',
+                                            'gpt-4o-mini',
+                                            'gpt-4o'
+                                        ].map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
+                                )}
 
                                 {provider === 'ollama' ? (
                                     <>
@@ -231,7 +275,7 @@ export function StatusBar({
                     {onTogglePaperView && (
                         <div className="status-item clickable" onClick={onTogglePaperView} title="Toggle Paper View (White Background)">
                             <FileText size={12} color={paperView ? "var(--text-primary)" : "var(--text-secondary)"} />
-                            <span>{paperView ? "Paper View" : "Theme View"}</span>
+                            <span>{paperView ? "Paper View ON" : "Paper View OFF"}</span>
                         </div>
                     )}
 

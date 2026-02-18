@@ -52,3 +52,15 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 installer/
+
+# Installer builds
+download_installer/
+
+# Linting
+.eslintcache
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/

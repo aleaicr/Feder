@@ -157,12 +157,85 @@ const ReferenceList = ({ bibData, citedKeys }) => {
     );
 };
 
+// Helper to process internal references (Figures, Tables, Equations)
+const processReferences = (text) => {
+    if (!text) return { content: '', map: {} };
+
+    // We process sequentially to build the map, then replace citations
+    let content = text;
+    const map = {};
+    let figCount = 0;
+    let tblCount = 0;
+    let eqCount = 0;
+
+    // 1. Figures: ![Alt](Src){attributes}
+    // Support {width=100% #id} or {id=id width=100%} etc.
+    // Regex matches ![...](...){...}
+    content = content.replace(/!\[(.*?)\]\((.*?)\)\{(.*?)\}/g, (match, alt, src, attrs) => {
+        let width = '';
+        let id = '';
+        let label = '';
+
+        // Extract Width
+        const wMatch = attrs.match(/width=([^}\s]+)/);
+        if (wMatch) width = wMatch[1];
+
+        // Extract ID (#id or id=...)
+        const idMatch = attrs.match(/#([a-zA-Z0-9_\-]+)/) || attrs.match(/id=([a-zA-Z0-9_\-]+)/);
+
+        // Only assign number if ID is present or if we want to auto-number all figures (usually good practice)
+        // But user specifically asked for "linkable", implying ID.
+        // Let's increment count anyway for "Figure X" label if ID is present.
+
+        if (idMatch) {
+            id = idMatch[1];
+            figCount++;
+            label = `Figure ${figCount}`;
+            map[id] = { label, type: 'figure', num: figCount };
+        }
+
+        // Pack metadata into alt for AsyncImage to retrieve
+        // Format: Alt Text|width=...|id=...|label=...
+        const packedAlt = `${alt}|width=${width}|id=${id}|label=${label}`;
+        return `![${packedAlt}](${src})`;
+    });
+
+    // 2. Tables: Table: Caption {#id}
+    // Pattern: Line starting with "Table:" ending with "{#id}"
+    // We replace it with an HTML caption + anchor
+    content = content.replace(/^Table:\s*(.*?)\s*\{#([a-zA-Z0-9_\-]+)\}/gm, (match, caption, id) => {
+        tblCount++;
+        const label = `Table ${tblCount}`;
+        map[id] = { label, type: 'table', num: tblCount };
+        return `<div id="${id}" class="table-caption" style="text-align:center; margin: 1em 0; font-weight:500;"><strong>${label}</strong>: ${caption}</div>`;
+    });
+
+    // 3. Equations: $$ ... \label{id} ... $$
+    // We expect \label{id} inside $$ block.
+    // We wrap in a div with id, and replace \label with \tag if simpler, or just remove label.
+    // Katex \tag overrides auto-numbering.
+    content = content.replace(/\$\$([\s\S]*?)\\label\{([a-zA-Z0-9_\-]+)\}([\s\S]*?)\$\$/g, (match, before, id, after) => {
+        eqCount++;
+        const label = `Equation ${eqCount}`;
+        map[id] = { label, type: 'equation', num: eqCount };
+        // We use \tag for visual numbering
+        return `<div id="${id}">$$${before}${after}\\tag{${eqCount}}$$</div>`;
+    });
+
+    // 4. Resolve Citations: [type@id]
+    content = content.replace(/\[(figure|table|equation)@([a-zA-Z0-9_\-]+)\]/g, (match, type, id) => {
+        if (map[id]) {
+            // Return a link to the anchor
+            return `[${map[id].label}](#${id})`;
+        }
+        return `[?${type}@${id}?]`;
+    });
+
+    return { content, map };
+};
+
 const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, activeAccentColor, fullContent, metadata, projectMetadata }) => {
     const [isOpen, setIsOpen] = useState(true);
-
-    const processedContent = React.useMemo(() => {
-        return content.replace(/!\[(.*?)\]\((.*?)\)\{width=(.*?)\}/g, '![$1|width=$3]($2)');
-    }, [content]);
 
     // Custom components with offset-aware checkbox logic
     const components = {
@@ -235,7 +308,7 @@ const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, a
                     rehypePlugins={[rehypeKatex]}
                     components={components}
                 >
-                    {processedContent}
+                    {content}
                 </ReactMarkdown>
             </div>
         );
@@ -262,7 +335,7 @@ const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, a
                         rehypePlugins={[rehypeKatex]}
                         components={components}
                     >
-                        {processedContent}
+                        {content}
                     </ReactMarkdown>
                 </div>
             )}
@@ -416,7 +489,13 @@ function PreviewComponent({ content, metadata, projectMetadata, dirHandle, mode,
         return { contentWithCitations: newContent, citedKeys: keys };
     }, [content, bibData]);
 
-    const sections = React.useMemo(() => splitByH1(contentWithCitations), [contentWithCitations]);
+    // Process Internal References (Figures, Tables, Equations)
+    // Process Internal References (Figures, Tables, Equations)
+    const { content: contentWithInternalRefs } = React.useMemo(() => {
+        return processReferences(contentWithCitations);
+    }, [contentWithCitations]);
+
+    const sections = React.useMemo(() => splitByH1(contentWithInternalRefs), [contentWithInternalRefs]);
 
     return (
         <div
@@ -697,13 +776,26 @@ export const Preview = React.memo(PreviewComponent);
 function AsyncImage({ src, alt, dirHandle, metadata, projectMetadata }) {
     const [imgSrc, setImgSrc] = useState(src);
 
-    // Extract width if present in alt text (from pipe syntax)
+    // Extract packed metadata from alt
+    // Format: Alt Text|width=...|id=...|label=...
     let displayAlt = alt || '';
     let width = null;
-    if (displayAlt && displayAlt.includes('|width=')) {
-        const parts = displayAlt.split('|width=');
-        displayAlt = parts[0];
-        width = parts[1];
+    let id = null;
+    let label = null;
+
+    if (displayAlt) {
+        // Simple parsing of pipe-separated key=value pairs
+        if (displayAlt.includes('|')) {
+            const parts = displayAlt.split('|');
+            displayAlt = parts[0]; // First part is always clean alt
+
+            for (let i = 1; i < parts.length; i++) {
+                const part = parts[i];
+                if (part.startsWith('width=')) width = part.replace('width=', '');
+                else if (part.startsWith('id=')) id = part.replace('id=', '');
+                else if (part.startsWith('label=')) label = part.replace('label=', '');
+            }
+        }
     }
 
     // Caption Alignment: check metadata (file frontmatter) first, then projectMetadata
@@ -742,7 +834,7 @@ function AsyncImage({ src, alt, dirHandle, metadata, projectMetadata }) {
     }, [src, dirHandle]);
 
     return (
-        <figure style={{ textAlign: 'center', width: '100%', margin: '1.5rem 0' }}>
+        <figure id={id} style={{ textAlign: 'center', width: '100%', margin: '1.5rem 0' }}>
             <img
                 src={imgSrc}
                 alt={displayAlt}
@@ -752,11 +844,12 @@ function AsyncImage({ src, alt, dirHandle, metadata, projectMetadata }) {
                     width: width || 'auto'
                 }}
             />
-            {displayAlt && (
+            {(displayAlt || label) && (
                 <figcaption
                     className="text-sm text-gray-500 mt-2 italic"
                     style={{ textAlign: captionAlign }}
                 >
+                    {label && <strong>{label}: </strong>}
                     {displayAlt}
                 </figcaption>
             )}

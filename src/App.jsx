@@ -46,24 +46,10 @@ function App() {
     phone: '',
     ai: {
       enabled: false,
-      provider: 'openai',
-      maxChars: 120,
-      debounceMs: 400,
-      openai: {
-        enabled: true,
-        apiKey: '',
-        model: 'gpt-4o-mini'
-      },
-      ollama: {
-        enabled: false,
-        baseUrl: 'http://localhost:11434',
-        model: 'llama3.1:8b'
-      },
-      gemini: {
-        enabled: false,
-        apiKey: '',
-        model: 'gemini-1.5-flash'
-      }
+      // API Keys are stored here. Config is now in projectMetadata.aiConfig
+      openai: { apiKey: '' },
+      gemini: { apiKey: '' },
+      ollama: { baseUrl: 'http://localhost:11434' }
     }
   });
 
@@ -1192,6 +1178,7 @@ function App() {
             mode={mode}
             onUploadImage={onUploadImage}
             settings={settings}
+            projectMetadata={projectMetadata}
             onAiThinking={setIsAiThinking}
             onRegisterCancel={(fn) => { cancelAiRef.current = fn; }}
           />
@@ -1293,6 +1280,7 @@ function App() {
               projectMetadata={projectMetadata}
               onOpenSettings={() => setShowSettingsModal(true)}
               onUpdateSettings={async (newSettings) => {
+                // SENSITIVE KEYS (v1): Keep keys in global settings, but move CONFIG to projectMeta
                 setSettings(newSettings);
                 await saveSettings(newSettings);
               }}
@@ -1312,6 +1300,7 @@ function App() {
               onClose={() => setShowSettingsModal(false)}
               settings={settings}
               onUpdateSettings={async (newSettings) => {
+                // Keep keys in global settings
                 setSettings(newSettings);
                 await saveSettings(newSettings);
               }}

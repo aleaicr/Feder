@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Bold, Italic, Underline, Heading1, Heading2, Image, Link, List, Quote, Code, ImagePlus, Sparkles } from 'lucide-react';
 import { requestInlineSuggestion } from '../utils/aiSuggestions';
 
-export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThinking, onRegisterCancel }) {
+export function Editor({ value, onChange, mode, onUploadImage, settings, projectMetadata, onAiThinking, onRegisterCancel }) {
     const textareaRef = useRef(null);
     const mirrorRef = useRef(null);
     const ghostRef = useRef(null);
@@ -16,6 +16,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThi
     const [isSuggesting, setIsSuggesting] = useState(false);
     const [cursorVersion, setCursorVersion] = useState(0);
     const [caretPos, setCaretPos] = useState({ top: 0, left: 0 });
+    const [showCiteMenu, setShowCiteMenu] = useState(false);
 
     const insertText = (before, after = '') => {
         const textarea = textareaRef.current;
@@ -167,8 +168,17 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThi
 
     // AI Suggestion Logic
     const fetchSuggestion = useCallback(async () => {
-        const ai = settings && settings.ai ? settings.ai : null;
-        if (!ai || !ai.enabled) {
+        const aiGlobal = settings?.ai || {};
+        const aiProject = projectMetadata?.aiConfig || {};
+        const aiConfig = {
+            ...aiGlobal,
+            ...aiProject,
+            openai: { ...(aiGlobal.openai || {}), ...(aiProject.openai || {}) },
+            gemini: { ...(aiGlobal.gemini || {}), ...(aiProject.gemini || {}) },
+            ollama: { ...(aiGlobal.ollama || {}), ...(aiProject.ollama || {}) }
+        };
+
+        if (!aiConfig.enabled) {
             setSuggestion('');
             if (onAiThinking) onAiThinking(false);
             setIsSuggesting(false);
@@ -210,7 +220,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThi
 
         try {
             const suggestionText = await requestInlineSuggestion({
-                settings,
+                aiConfig,
                 prefix: prefix.slice(-3000),
                 suffix: suffix.slice(0, 1000),
                 mode,
@@ -234,17 +244,20 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThi
                 if (onAiThinking) onAiThinking(false);
             }
         }
-    }, [value, mode, settings, onAiThinking]);
+    }, [value, mode, settings, projectMetadata, onAiThinking]);
 
 
     // Automatic Trigger Effect
     useEffect(() => {
-        const ai = settings?.ai;
-        if (!ai || !ai.enabled || ai.triggerMode === 'manual') {
+        const aiProject = projectMetadata?.aiConfig || {};
+        const enabled = settings?.ai?.enabled;
+        const triggerMode = aiProject.triggerMode || 'automatic';
+
+        if (!enabled || triggerMode === 'manual') {
             return;
         }
 
-        const debounceMs = ai.debounceMs || 1000; // Default to 1s if not set, user asked for "X second"
+        const debounceMs = aiProject.debounceMs || 1000;
 
         if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -256,7 +269,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThi
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
         };
-    }, [value, cursorVersion, fetchSuggestion, settings?.ai]);
+    }, [value, cursorVersion, fetchSuggestion, settings?.ai?.enabled, projectMetadata?.aiConfig]);
 
     useEffect(() => {
         if (onRegisterCancel) {
@@ -296,15 +309,55 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThi
                 <ToolBtn icon={<Code size={18} />} onClick={() => insertText('`', '`')} title="Inline Code" />
                 <div className="divider"></div>
                 <ToolBtn icon={<Link size={18} />} onClick={() => insertText('[', '](url)')} title="Link" />
-                <ToolBtn icon={<Image size={18} />} onClick={() => insertText('![alt]', '(src){width=100%}')} title="Image (Text)" />
+                <ToolBtn icon={<Image size={18} />} onClick={() => insertText('![Caption of the figure]', '(path_to_figure){#label_figure width=100%}')} title="Image (Text)" />
                 <ToolBtn icon={<ImagePlus size={18} />} onClick={handleImageUpload} title="Upload Image" />
                 <div className="divider"></div>
                 {settings?.ai?.enabled && (
-                    <ToolBtn icon={<Sparkles size={18} />} onClick={() => { lastContextRef.current = ''; fetchSuggestion(); }} title="Trigger AI (Ctrl+Space)" />
+                    <ToolBtn icon={<Sparkles size={18} />} onClick={() => {
+                        lastContextRef.current = '';
+                        fetchSuggestion();
+                    }} title="Trigger AI (Ctrl+Space)" />
                 )}
                 {/* Researcher Mode Tools */}
                 {mode === 'researcher' && (
-                    <ToolBtn label="Cite" onClick={() => insertText('[@', ']')} title="Insert Citation" />
+                    <div className="relative-tool-container" style={{ position: 'relative', display: 'inline-block' }}>
+                        <ToolBtn
+                            label="Cite"
+                            onClick={() => setShowCiteMenu(!showCiteMenu)}
+                            title="Insert Citation or Reference"
+                        />
+                        {showCiteMenu && (
+                            <div className="tool-dropdown-menu" style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                background: 'var(--bg-panel)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '6px',
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                                zIndex: 100,
+                                minWidth: '200px',
+                                padding: '4px 0'
+                            }}>
+                                <button className="dropdown-item" onClick={() => { insertText('[@paper_label]', ''); setShowCiteMenu(false); }}>
+                                    Cite Paper
+                                </button>
+                                <button className="dropdown-item" onClick={() => { insertText('[text@paper_label]', ''); setShowCiteMenu(false); }}>
+                                    Cite Paper as Text
+                                </button>
+                                <div className="divider-h"></div>
+                                <button className="dropdown-item" onClick={() => { insertText('[figure@figure_label]', ''); setShowCiteMenu(false); }}>
+                                    Cross Reference Figure
+                                </button>
+                                <button className="dropdown-item" onClick={() => { insertText('[equation@equation_label]', ''); setShowCiteMenu(false); }}>
+                                    Cross Reference Equation
+                                </button>
+                                <button className="dropdown-item" onClick={() => { insertText('[table@table_label]', ''); setShowCiteMenu(false); }}>
+                                    Cross Reference Table
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
 
@@ -371,7 +424,9 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, onAiThi
                                 const fileInfo = JSON.parse(data);
                                 const { name, path } = fileInfo;
                                 if (name.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
-                                    insertText(`![${name}](${path}){width=100%}`, '');
+                                    // Derive ID from filename (remove extension)
+                                    const id = name.replace(/\.[^/.]+$/, "");
+                                    insertText(`![Caption of the figure](${path}){#${id} width=100%}`, '');
                                 } else if (name.endsWith('.md')) {
                                     insertText(`[${name}](${path})`, '');
                                 } else {

@@ -20,18 +20,51 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
     };
 
     const handleAIChange = (path, value) => {
-        const updatedAI = { ...(localSettings.ai || {}) };
-        let cursor = updatedAI;
-        for (let i = 0; i < path.length - 1; i += 1) {
-            const key = path[i];
-            cursor[key] = { ...(cursor[key] || {}) };
+        // Decide where to save: Sensitive keys go to global 'settings', config goes to 'projectMetadata'
+        const isSensitive = path.includes('apiKey');
+
+        if (isSensitive) {
+            const updatedAI = { ...(localSettings.ai || {}) };
+            let cursor = updatedAI;
+            for (let i = 0; i < path.length - 1; i += 1) {
+                const key = path[i];
+                cursor[key] = { ...(cursor[key] || {}) };
+                cursor = cursor[key];
+            }
+            cursor[path[path.length - 1]] = value;
+
+            const updated = { ...localSettings, ai: updatedAI };
+            setLocalSettings(updated);
+            if (onUpdateSettings) onUpdateSettings(updated);
+        } else {
+            // Save to project metadata
+            const updatedAiMeta = { ...(localMeta.aiConfig || {}) };
+            let cursor = updatedAiMeta;
+            for (let i = 0; i < path.length - 1; i += 1) {
+                const key = path[i];
+                cursor[key] = { ...(cursor[key] || {}) };
+                cursor = cursor[key];
+            }
+            cursor[path[path.length - 1]] = value;
+
+            const updated = { ...localMeta, aiConfig: updatedAiMeta };
+            setLocalMeta(updated);
+            if (onUpdate) onUpdate(updated);
+        }
+    };
+
+    // Helper to get value from either source
+    const getAIVal = (path, defaultValue) => {
+        const isSensitive = path.includes('apiKey');
+        let source = isSensitive ? localSettings.ai : localMeta.aiConfig;
+        if (!source) return defaultValue;
+
+        let cursor = source;
+        for (const key of path) {
+            if (cursor[key] === undefined) return defaultValue;
             cursor = cursor[key];
         }
-        cursor[path[path.length - 1]] = value;
-
-        const updated = { ...localSettings, ai: updatedAI };
-        setLocalSettings(updated);
-        if (onUpdateSettings) onUpdateSettings(updated);
+        return cursor ?? defaultValue;
     };
 
 
@@ -102,7 +135,7 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                                     <div className="setting-input-group">
                                         <label>Provider</label>
                                         <select
-                                            value={localSettings.ai?.provider || 'gemini'}
+                                            value={getAIVal(['provider'], 'gemini')}
                                             onChange={(e) => handleAIChange(['provider'], e.target.value)}
                                             className="form-input"
                                         >
@@ -113,65 +146,66 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                                     </div>
 
                                     {/* 2. Provider Specific Settings */}
-                                    {(localSettings.ai?.provider === 'gemini' || !localSettings.ai?.provider) && (
+                                    {getAIVal(['provider'], 'gemini') === 'gemini' && (
                                         <div className="setting-input-group" style={{ marginTop: 12 }}>
                                             <label>Gemini Configuration</label>
                                             <div className="input-with-icon">
                                                 <input
                                                     type="password"
-                                                    value={localSettings.ai?.gemini?.apiKey || ''}
+                                                    value={getAIVal(['gemini', 'apiKey'], '')}
                                                     onChange={(e) => handleAIChange(['gemini', 'apiKey'], e.target.value)}
                                                     placeholder="Gemini API Key"
                                                 />
                                             </div>
                                             <div className="input-with-icon" style={{ marginTop: 8 }}>
                                                 <select
-                                                    value={localSettings.ai?.gemini?.model || 'gemini-2.5-flash'}
+                                                    value={getAIVal(['gemini', 'model'], 'gemini-2.5-flash-lite (recommended)')}
                                                     onChange={(e) => handleAIChange(['gemini', 'model'], e.target.value)}
                                                     className="form-input"
                                                 >
-                                                    <option value="gemini-2.5-flash">gemini-2.5-flash (Fastest)</option>
-                                                    <option value="gemini-2.5-pro">gemini-2.5-pro (High Quality)</option>
-                                                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                                                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                                    <option value="gemini-2.5-flash-lite (recommended)">gemini-2.5-flash-lite (Recommended)</option>
+                                                    <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                                    <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+                                                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                                    <option value="gemini-2.5-pro">gemini-2.5-pro</option>
                                                 </select>
                                             </div>
                                         </div>
                                     )}
 
-                                    {localSettings.ai?.provider === 'openai' && (
+                                    {getAIVal(['provider']) === 'openai' && (
                                         <div className="setting-input-group" style={{ marginTop: 12 }}>
                                             <label>OpenAI Configuration</label>
                                             <div className="input-with-icon">
                                                 <input
                                                     type="password"
-                                                    value={localSettings.ai?.openai?.apiKey || ''}
+                                                    value={getAIVal(['openai', 'apiKey'], '')}
                                                     onChange={(e) => handleAIChange(['openai', 'apiKey'], e.target.value)}
                                                     placeholder="OpenAI API Key"
                                                 />
                                             </div>
                                             <div className="input-with-icon" style={{ marginTop: 8 }}>
                                                 <select
-                                                    value={localSettings.ai?.openai?.model || 'gpt-4o-mini'}
+                                                    value={getAIVal(['openai', 'model'], 'gpt-5.2-chat-latest')}
                                                     onChange={(e) => handleAIChange(['openai', 'model'], e.target.value)}
                                                     className="form-input"
                                                 >
-                                                    <option value="gpt-4o-mini">gpt-4o-mini (Fast & Cheap)</option>
-                                                    <option value="gpt-4o">gpt-4o (High Quality)</option>
-                                                    <option value="gpt-4.5-preview">gpt-4.5-preview</option>
-                                                    <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                                                    <option value="gpt-5.2-chat-latest">gpt-5.2-chat-latest</option>
+                                                    <option value="gpt-5-mini">gpt-5-mini</option>
+                                                    <option value="gpt-4o-mini">gpt-4o-mini</option>
+                                                    <option value="gpt-4o">gpt-4o</option>
                                                 </select>
                                             </div>
                                         </div>
                                     )}
 
-                                    {localSettings.ai?.provider === 'ollama' && (
+                                    {getAIVal(['provider']) === 'ollama' && (
                                         <div className="setting-input-group" style={{ marginTop: 12 }}>
                                             <label>Ollama Configuration</label>
                                             <div className="input-with-icon">
                                                 <input
                                                     type="text"
-                                                    value={localSettings.ai?.ollama?.baseUrl || 'http://localhost:11434'}
+                                                    value={getAIVal(['ollama', 'baseUrl'], 'http://localhost:11434')}
                                                     onChange={(e) => handleAIChange(['ollama', 'baseUrl'], e.target.value)}
                                                     placeholder="http://localhost:11434"
                                                 />
@@ -179,9 +213,9 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                                             <div className="input-with-icon" style={{ marginTop: 8 }}>
                                                 <input
                                                     type="text"
-                                                    value={localSettings.ai?.ollama?.model || 'llama3.1:8b'}
+                                                    value={getAIVal(['ollama', 'model'], 'gemma3:4b (recommended)')}
                                                     onChange={(e) => handleAIChange(['ollama', 'model'], e.target.value)}
-                                                    placeholder="Model name (e.g., llama3.1:8b)"
+                                                    placeholder="Model name (e.g., gemma3:4b)"
                                                     className="form-input"
                                                 />
                                             </div>
@@ -193,16 +227,16 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                                         <label>Trigger Mode</label>
                                         <div className="segmented-control" style={{ width: 'fit-content' }}>
                                             <button
-                                                className={localSettings.ai?.triggerMode === 'automatic' || !localSettings.ai?.triggerMode ? 'active' : ''}
+                                                className={getAIVal(['triggerMode'], 'automatic') === 'automatic' ? 'active' : ''}
                                                 onClick={() => handleAIChange(['triggerMode'], 'automatic')}
                                             > Automatic (On Pause) </button>
                                             <button
-                                                className={localSettings.ai?.triggerMode === 'manual' ? 'active' : ''}
+                                                className={getAIVal(['triggerMode']) === 'manual' ? 'active' : ''}
                                                 onClick={() => handleAIChange(['triggerMode'], 'manual')}
                                             > Manual (Shortcut) </button>
                                         </div>
                                         <span className="setting-desc" style={{ marginTop: 4, display: 'block' }}>
-                                            {localSettings.ai?.triggerMode === 'manual'
+                                            {getAIVal(['triggerMode']) === 'manual'
                                                 ? "AI only triggers on Ctrl+Space or toolbar button."
                                                 : "AI triggers automatically when you pause typing."}
                                         </span>
@@ -211,29 +245,28 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                                     {/* 3. General Configuration (Bottom) */}
                                     <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                                         <div className="setting-input-group" style={{ flex: 1 }}>
-                                            <label>Max Words</label>
+                                            <label>Max Words <span style={{ fontSize: '10px', opacity: 0.6 }}>(12 recommended)</span></label>
                                             <input
                                                 type="number"
                                                 min="5"
                                                 max="100"
-                                                value={localSettings.ai?.maxWords || 12}
+                                                value={getAIVal(['maxWords'], 12)}
                                                 onChange={(e) => handleAIChange(['maxWords'], Number(e.target.value))}
-                                                className="form-input"
+                                                className="form-input clean-number"
                                             />
                                         </div>
                                         <div className="setting-input-group" style={{ flex: 1 }}>
-                                            <label>Auto-trigger Delay (seconds)</label>
+                                            <label>Delay <span style={{ fontSize: '10px', opacity: 0.6 }}>(1.0 recommended)</span></label>
                                             <input
                                                 type="number"
                                                 min="0.2"
                                                 max="5"
                                                 step="0.1"
-                                                value={(localSettings.ai?.debounceMs || 1000) / 1000}
+                                                value={getAIVal(['debounceMs'], 1000) / 1000}
                                                 onChange={(e) => handleAIChange(['debounceMs'], Number(e.target.value) * 1000)}
-                                                className="form-input"
+                                                className="form-input clean-number"
                                             />
                                         </div>
-
                                     </div>
                                 </div>
                             )}
@@ -480,6 +513,16 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                     border-color: var(--accent-color);
                     outline: none;
                     box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), 0.1);
+                }
+
+                /* Remove arrows from number inputs */
+                .clean-number::-webkit-inner-spin-button,
+                .clean-number::-webkit-outer-spin-button {
+                    -webkit-appearance: none;
+                    margin: 0;
+                }
+                .clean-number {
+                    -moz-appearance: textfield;
                 }
 
                 .modal-footer {

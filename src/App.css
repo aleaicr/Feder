@@ -1216,3 +1216,18 @@
 .panel-preview.paper-view-active .preview-content blockquote {
     color: #000000 !important;
 }
+
+/* Hide arrows in number inputs */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type=number].clean-number {
+    -moz-appearance: textfield;
+}
+
+.clean-number {
+    -moz-appearance: textfield;
+}

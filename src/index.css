@@ -47,19 +47,18 @@
 }
 
 .semi-light {
-  /* Colors - Semi Light (Deep Kraft / Dark Parchment) - A solid mid-tone for glare-free reading */
-  --bg-app: #a89f91;
-  --bg-panel: #c5bbac;
-  --text-primary: #26201b;
-  --text-secondary: #594a42;
-  --border-color: #998e7e;
-  --accent-color: #795548;
-  /* Classic Leather */
-  --accent-color-rgb: 121, 85, 72;
-  --accent-hover: #5d4037;
-  --toolbar-bg: #c5bbac;
-  --hover-bg: rgba(38, 32, 27, 0.08);
-  /* Espresso tint */
+  /* Colors - Semi Light (Parchment Sepia) - A balanced, warm reading experience */
+  --bg-app: #dfd7cc;
+  --bg-panel: #f2eadf;
+  --text-primary: #3e2723;
+  --text-secondary: #5d4a42;
+  --border-color: #d8cebf;
+  --accent-color: #8d6e63;
+  /* Warm Cocoa */
+  --accent-color-rgb: 141, 110, 99;
+  --accent-hover: #6d4c41;
+  --toolbar-bg: #f2eadf;
+  --hover-bg: rgba(62, 39, 35, 0.06);
 }
 
 
@@ -651,4 +650,43 @@ input:checked+.slider:before {
 
 .dark ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* Dropdown Menu Styles */
+.tool-dropdown-menu {
+  animation: fadeIn 0.1s ease-out;
+  border-radius: 6px;
+  overflow: hidden; /* For rounded corners on hover */
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  transition: all 0.15s ease;
+  font-family: var(--font-sans);
+  font-weight: 500;
+}
+
+.dropdown-item:hover {
+  background: var(--hover-bg);
+  color: var(--accent-color);
+  padding-left: 16px; /* Subtle movement */
+}
+
+.divider-h {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
 }

@@ -165,7 +165,11 @@ export function FileExplorer({
         e.stopPropagation();
         setDraggedNode(node);
         setDraggedPath({ path, parentPath });
-        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.effectAllowed = 'copyMove';
+        e.dataTransfer.setData('application/json', JSON.stringify({
+            name: node.name,
+            path: path.startsWith('/') ? path.slice(1) : path
+        }));
     };
 
     const handleDragEnd = () => {

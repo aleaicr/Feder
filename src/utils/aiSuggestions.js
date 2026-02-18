@@ -136,15 +136,14 @@ const requestOllama = async ({ baseUrl, model, prefix, suffix, maxWords, signal 
 
 
 // --- MAIN EXPORT ---
-export const requestInlineSuggestion = async ({ settings, prefix, suffix, mode, signal }) => {
-    const ai = settings && settings.ai ? settings.ai : null;
-    if (!ai || !ai.enabled) return '';
+export const requestInlineSuggestion = async ({ aiConfig, prefix, suffix, mode, signal }) => {
+    if (!aiConfig || !aiConfig.enabled) return '';
 
-    const provider = ai.provider || 'gemini';
-    const maxWords = ai.maxWords || 12; // Default to ~12 words (sentence fragment)
+    const provider = aiConfig.provider || 'gemini';
+    const maxWords = aiConfig.maxWords || 12; // Default to ~12 words (sentence fragment)
 
     if (provider === 'gemini') {
-        const geminiSettings = ai.gemini || {};
+        const geminiSettings = aiConfig.gemini || {};
         if (!geminiSettings.apiKey) return '';
         return await requestGemini({
             apiKey: geminiSettings.apiKey,
@@ -157,7 +156,7 @@ export const requestInlineSuggestion = async ({ settings, prefix, suffix, mode, 
     }
 
     if (provider === 'openai') {
-        const openaiSettings = ai.openai || {};
+        const openaiSettings = aiConfig.openai || {};
         if (!openaiSettings.apiKey) return '';
         return await requestOpenAI({
             apiKey: openaiSettings.apiKey,
@@ -170,7 +169,7 @@ export const requestInlineSuggestion = async ({ settings, prefix, suffix, mode, 
     }
 
     if (provider === 'ollama') {
-        const ollamaSettings = ai.ollama || {};
+        const ollamaSettings = aiConfig.ollama || {};
         return await requestOllama({
             baseUrl: ollamaSettings.baseUrl,
             model: ollamaSettings.model,

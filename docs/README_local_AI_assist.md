@@ -70,26 +70,8 @@ Now that Ollama is running, connect it to Feder.
 ## 🧪 Step 4: Test It Out!
 
 1.  Open any Markdown file in Feder.
+2.  Activate the AI-assisted inline suggestions
 2.  Type a partial sentence (e.g., `The quick brown fox `) and **stop typing**.
-3.  Watch the bottom right corner for "AI is thinking...".
+3.  Watch the bottom right corner for "AI is thinking...". (If not, then use the shortcut CTRL + space)
 4.  If successful, ghost text will appear in grey. Press **Tab** to accept it!
 
----
-
-## ❓ FAQ & Troubleshooting
-
-### **Q: What is "8B" or "7B"?**
-**A:** This refers to the number of **Parameters** (in Billions).
-- **8B (8 Billion)**: The "brain size". Larger models (like 70B) are smarter but require massive amounts of RAM and a powerful GPU.
-- **8B is the sweet spot** for most modern laptops (requires ~8GB RAM).
-
-### **Q: It's too slow!**
-- **Check your hardware**: Local AI relies heavily on your GPU (Graphics Card). If you don't have a dedicated GPU (NVIDIA RTX, etc.), it will run on your CPU, which is much slower.
-- **Try a smaller model**: If `llama3.1` is slow, try `phi3` or `qwen2:1.5b`. (Run `ollama pull phi3`).
-
-### **Q: "Ollama Error: Connection Refused"**
-- Ensure Ollama is actually running in the background. Check your system tray taskbar.
-- Open a terminal and run `ollama serve` to manually start it if needed.
-
-### **Q: Can I use OpenAI models locally?**
-**No**, OpenAI models (GPT-4o, etc.) are closed-source and only available via their API (Cloud). However, models like **Llama 3** and **DeepSeek** often perform similarly for short text completions!
