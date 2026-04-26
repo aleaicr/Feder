@@ -19,55 +19,34 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
         onUpdate(updated);
     };
 
+    // ALL AI settings go to global settings.ai (single source of truth)
     const handleAIChange = (path, value) => {
-        // Decide where to save: Sensitive keys go to global 'settings', config goes to 'projectMetadata'
-        const isSensitive = path.includes('apiKey');
-
-        if (isSensitive) {
-            const updatedAI = { ...(localSettings.ai || {}) };
-            let cursor = updatedAI;
-            for (let i = 0; i < path.length - 1; i += 1) {
-                const key = path[i];
-                cursor[key] = { ...(cursor[key] || {}) };
-                cursor = cursor[key];
-            }
-            cursor[path[path.length - 1]] = value;
-
-            const updated = { ...localSettings, ai: updatedAI };
-            setLocalSettings(updated);
-            if (onUpdateSettings) onUpdateSettings(updated);
-        } else {
-            // Save to project metadata
-            const updatedAiMeta = { ...(localMeta.aiConfig || {}) };
-            let cursor = updatedAiMeta;
-            for (let i = 0; i < path.length - 1; i += 1) {
-                const key = path[i];
-                cursor[key] = { ...(cursor[key] || {}) };
-                cursor = cursor[key];
-            }
-            cursor[path[path.length - 1]] = value;
-
-            const updated = { ...localMeta, aiConfig: updatedAiMeta };
-            setLocalMeta(updated);
-            if (onUpdate) onUpdate(updated);
+        const updatedAI = { ...(localSettings.ai || {}) };
+        let cursor = updatedAI;
+        for (let i = 0; i < path.length - 1; i += 1) {
+            const key = path[i];
+            cursor[key] = { ...(cursor[key] || {}) };
+            cursor = cursor[key];
         }
+        cursor[path[path.length - 1]] = value;
+
+        const updated = { ...localSettings, ai: updatedAI };
+        setLocalSettings(updated);
+        if (onUpdateSettings) onUpdateSettings(updated);
     };
 
-    // Helper to get value from either source
+    // Helper to read from settings.ai
     const getAIVal = (path, defaultValue) => {
-        const isSensitive = path.includes('apiKey');
-        let source = isSensitive ? localSettings.ai : localMeta.aiConfig;
+        let source = localSettings.ai;
         if (!source) return defaultValue;
 
         let cursor = source;
         for (const key of path) {
-            if (cursor[key] === undefined) return defaultValue;
+            if (cursor == null || cursor[key] === undefined) return defaultValue;
             cursor = cursor[key];
         }
         return cursor ?? defaultValue;
     };
-
-
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -114,24 +93,25 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                             <span>AI Assist</span>
                         </div>
                         <div className="settings-card">
+                            {/* Enable/Disable */}
                             <div className="setting-row">
                                 <div className="setting-info">
-                                    <span className="setting-name">Inline Suggestions</span>
-                                    <span className="setting-desc">Fast inline text continuations while typing</span>
+                                    <span className="setting-name">Enable AI Assistance</span>
+                                    <span className="setting-desc">Inline suggestions and text improvements</span>
                                 </div>
                                 <label className="switch">
                                     <input
                                         type="checkbox"
-                                        checked={localSettings.ai?.enabled || false}
+                                        checked={getAIVal(['enabled'], false)}
                                         onChange={(e) => handleAIChange(['enabled'], e.target.checked)}
                                     />
                                     <span className="slider round"></span>
                                 </label>
                             </div>
 
-                            {localSettings.ai?.enabled && (
+                            {getAIVal(['enabled'], false) && (
                                 <div style={{ marginTop: 20 }}>
-                                    {/* 1. Provider Selection */}
+                                    {/* Provider */}
                                     <div className="setting-input-group">
                                         <label>Provider</label>
                                         <select
@@ -139,81 +119,85 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                                             onChange={(e) => handleAIChange(['provider'], e.target.value)}
                                             className="form-input"
                                         >
-                                            <option value="gemini">Google Gemini (Recommended)</option>
-                                            <option value="openai">OpenAI (Cloud)</option>
+                                            <option value="gemini">Google Gemini</option>
+                                            <option value="openai">OpenAI</option>
                                             <option value="ollama">Ollama (Local)</option>
                                         </select>
                                     </div>
 
-                                    {/* 2. Provider Specific Settings */}
+                                    {/* Gemini Config */}
                                     {getAIVal(['provider'], 'gemini') === 'gemini' && (
-                                        <div className="setting-input-group" style={{ marginTop: 12 }}>
-                                            <label>Gemini Configuration</label>
-                                            <div className="input-with-icon">
+                                        <div style={{ marginTop: 12 }}>
+                                            <div className="setting-input-group">
+                                                <label>API Key</label>
                                                 <input
                                                     type="password"
                                                     value={getAIVal(['gemini', 'apiKey'], '')}
                                                     onChange={(e) => handleAIChange(['gemini', 'apiKey'], e.target.value)}
-                                                    placeholder="Gemini API Key"
+                                                    placeholder="Enter your Gemini API Key"
+                                                    className="form-input"
                                                 />
                                             </div>
-                                            <div className="input-with-icon" style={{ marginTop: 8 }}>
+                                            <div className="setting-input-group" style={{ marginTop: 8 }}>
+                                                <label>Model</label>
                                                 <select
-                                                    value={getAIVal(['gemini', 'model'], 'gemini-2.5-flash-lite (recommended)')}
+                                                    value={getAIVal(['gemini', 'model'], 'gemini-2.5-flash')}
                                                     onChange={(e) => handleAIChange(['gemini', 'model'], e.target.value)}
                                                     className="form-input"
                                                 >
-                                                    <option value="gemini-2.5-flash-lite (recommended)">gemini-2.5-flash-lite (Recommended)</option>
-                                                    <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                                                    <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-                                                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                                    <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>
+                                                    <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (Fast)</option>
                                                     <option value="gemini-2.5-pro">gemini-2.5-pro</option>
                                                 </select>
                                             </div>
                                         </div>
                                     )}
 
-                                    {getAIVal(['provider']) === 'openai' && (
-                                        <div className="setting-input-group" style={{ marginTop: 12 }}>
-                                            <label>OpenAI Configuration</label>
-                                            <div className="input-with-icon">
+                                    {/* OpenAI Config */}
+                                    {getAIVal(['provider'], 'gemini') === 'openai' && (
+                                        <div style={{ marginTop: 12 }}>
+                                            <div className="setting-input-group">
+                                                <label>API Key</label>
                                                 <input
                                                     type="password"
                                                     value={getAIVal(['openai', 'apiKey'], '')}
                                                     onChange={(e) => handleAIChange(['openai', 'apiKey'], e.target.value)}
-                                                    placeholder="OpenAI API Key"
+                                                    placeholder="Enter your OpenAI API Key"
+                                                    className="form-input"
                                                 />
                                             </div>
-                                            <div className="input-with-icon" style={{ marginTop: 8 }}>
+                                            <div className="setting-input-group" style={{ marginTop: 8 }}>
+                                                <label>Model</label>
                                                 <select
-                                                    value={getAIVal(['openai', 'model'], 'gpt-5.2-chat-latest')}
+                                                    value={getAIVal(['openai', 'model'], 'gpt-4o-mini')}
                                                     onChange={(e) => handleAIChange(['openai', 'model'], e.target.value)}
                                                     className="form-input"
                                                 >
-                                                    <option value="gpt-5.2-chat-latest">gpt-5.2-chat-latest</option>
-                                                    <option value="gpt-5-mini">gpt-5-mini</option>
-                                                    <option value="gpt-4o-mini">gpt-4o-mini</option>
+                                                    <option value="gpt-4o-mini">gpt-4o-mini (Recommended)</option>
                                                     <option value="gpt-4o">gpt-4o</option>
                                                 </select>
                                             </div>
                                         </div>
                                     )}
 
-                                    {getAIVal(['provider']) === 'ollama' && (
-                                        <div className="setting-input-group" style={{ marginTop: 12 }}>
-                                            <label>Ollama Configuration</label>
-                                            <div className="input-with-icon">
+                                    {/* Ollama Config */}
+                                    {getAIVal(['provider'], 'gemini') === 'ollama' && (
+                                        <div style={{ marginTop: 12 }}>
+                                            <div className="setting-input-group">
+                                                <label>Server URL</label>
                                                 <input
                                                     type="text"
                                                     value={getAIVal(['ollama', 'baseUrl'], 'http://localhost:11434')}
                                                     onChange={(e) => handleAIChange(['ollama', 'baseUrl'], e.target.value)}
                                                     placeholder="http://localhost:11434"
+                                                    className="form-input"
                                                 />
                                             </div>
-                                            <div className="input-with-icon" style={{ marginTop: 8 }}>
+                                            <div className="setting-input-group" style={{ marginTop: 8 }}>
+                                                <label>Model</label>
                                                 <input
                                                     type="text"
-                                                    value={getAIVal(['ollama', 'model'], 'gemma3:4b (recommended)')}
+                                                    value={getAIVal(['ollama', 'model'], 'gemma3:4b')}
                                                     onChange={(e) => handleAIChange(['ollama', 'model'], e.target.value)}
                                                     placeholder="Model name (e.g., gemma3:4b)"
                                                     className="form-input"
@@ -222,52 +206,189 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                                         </div>
                                     )}
 
+                                    {/* Divider */}
+                                    <div style={{ borderBottom: '1px solid var(--border-color)', margin: '20px 0' }}></div>
+
+                                    {/* Inline Suggestion Parameters */}
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 12 }}>
+                                        Inline Suggestions
+                                    </div>
+
                                     {/* Trigger Mode */}
-                                    <div className="setting-input-group" style={{ marginTop: 16 }}>
+                                    <div className="setting-input-group">
                                         <label>Trigger Mode</label>
                                         <div className="segmented-control" style={{ width: 'fit-content' }}>
                                             <button
-                                                className={getAIVal(['triggerMode'], 'automatic') === 'automatic' ? 'active' : ''}
+                                                className={getAIVal(['triggerMode'], 'manual') === 'automatic' ? 'active' : ''}
                                                 onClick={() => handleAIChange(['triggerMode'], 'automatic')}
-                                            > Automatic (On Pause) </button>
+                                            > Automatic </button>
                                             <button
-                                                className={getAIVal(['triggerMode']) === 'manual' ? 'active' : ''}
+                                                className={getAIVal(['triggerMode'], 'manual') === 'manual' ? 'active' : ''}
                                                 onClick={() => handleAIChange(['triggerMode'], 'manual')}
-                                            > Manual (Shortcut) </button>
+                                            > Manual (Ctrl+Space) </button>
                                         </div>
                                         <span className="setting-desc" style={{ marginTop: 4, display: 'block' }}>
-                                            {getAIVal(['triggerMode']) === 'manual'
-                                                ? "AI only triggers on Ctrl+Space or toolbar button."
-                                                : "AI triggers automatically when you pause typing."}
+                                            {getAIVal(['triggerMode'], 'manual') === 'manual'
+                                                ? "Press Ctrl+Space or click the ✨ button to trigger."
+                                                : "Suggestions appear automatically when you pause typing."}
                                         </span>
                                     </div>
 
-                                    {/* 3. General Configuration (Bottom) */}
                                     <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                                         <div className="setting-input-group" style={{ flex: 1 }}>
-                                            <label>Max Words <span style={{ fontSize: '10px', opacity: 0.6 }}>(12 recommended)</span></label>
+                                            <label>Max Words <span style={{ fontSize: '10px', opacity: 0.6 }}>(suggestion length)</span></label>
                                             <input
                                                 type="number"
-                                                min="5"
-                                                max="100"
+                                                min="3"
+                                                max="80"
                                                 value={getAIVal(['maxWords'], 12)}
                                                 onChange={(e) => handleAIChange(['maxWords'], Number(e.target.value))}
                                                 className="form-input clean-number"
                                             />
                                         </div>
                                         <div className="setting-input-group" style={{ flex: 1 }}>
-                                            <label>Delay <span style={{ fontSize: '10px', opacity: 0.6 }}>(1.0 recommended)</span></label>
+                                            <label>Delay (s) <span style={{ fontSize: '10px', opacity: 0.6 }}>(auto mode)</span></label>
                                             <input
                                                 type="number"
-                                                min="0.2"
+                                                min="0.3"
                                                 max="5"
                                                 step="0.1"
-                                                value={getAIVal(['debounceMs'], 1000) / 1000}
-                                                onChange={(e) => handleAIChange(['debounceMs'], Number(e.target.value) * 1000)}
+                                                value={getAIVal(['debounceMs'], 1500) / 1000}
+                                                onChange={(e) => handleAIChange(['debounceMs'], Math.round(Number(e.target.value) * 1000))}
+                                                className="form-input clean-number"
+                                            />
+                                        </div>
+                                        <div className="setting-input-group" style={{ flex: 1 }}>
+                                            <label>Temperature <span style={{ fontSize: '10px', opacity: 0.6 }}>(creativity)</span></label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="2"
+                                                step="0.1"
+                                                value={getAIVal(['temperature'], 0.7)}
+                                                onChange={(e) => handleAIChange(['temperature'], Number(e.target.value))}
                                                 className="form-input clean-number"
                                             />
                                         </div>
                                     </div>
+
+                                    {/* Divider */}
+                                    <div style={{ borderBottom: '1px solid var(--border-color)', margin: '20px 0' }}></div>
+
+                                    {/* Improvements - optional separate config */}
+                                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 12 }}>
+                                        Text Improvements
+                                    </div>
+
+                                    <div className="setting-row" style={{ marginBottom: 12 }}>
+                                        <div className="setting-info">
+                                            <span className="setting-name" style={{ fontSize: '0.85rem' }}>Use separate model for improvements</span>
+                                            <span className="setting-desc">By default, uses the same provider and model above</span>
+                                        </div>
+                                        <label className="switch">
+                                            <input
+                                                type="checkbox"
+                                                checked={getAIVal(['improvements', 'separate'], false)}
+                                                onChange={(e) => handleAIChange(['improvements', 'separate'], e.target.checked)}
+                                            />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    {getAIVal(['improvements', 'separate'], false) && (
+                                        <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border-color)' }}>
+                                            <div className="setting-input-group">
+                                                <label>Improvement Provider</label>
+                                                <select
+                                                    value={getAIVal(['improvements', 'provider'], getAIVal(['provider'], 'gemini'))}
+                                                    onChange={(e) => handleAIChange(['improvements', 'provider'], e.target.value)}
+                                                    className="form-input"
+                                                >
+                                                    <option value="gemini">Google Gemini</option>
+                                                    <option value="openai">OpenAI</option>
+                                                    <option value="ollama">Ollama (Local)</option>
+                                                </select>
+                                            </div>
+
+                                            {getAIVal(['improvements', 'provider'], getAIVal(['provider'], 'gemini')) === 'gemini' && (
+                                                <div style={{ marginTop: 8 }}>
+                                                    <div className="setting-input-group">
+                                                        <label>API Key <span style={{ fontSize: '10px', opacity: 0.6 }}>(leave empty to use main)</span></label>
+                                                        <input
+                                                            type="password"
+                                                            value={getAIVal(['improvements', 'gemini', 'apiKey'], '')}
+                                                            onChange={(e) => handleAIChange(['improvements', 'gemini', 'apiKey'], e.target.value)}
+                                                            placeholder="Override API Key (optional)"
+                                                            className="form-input"
+                                                        />
+                                                    </div>
+                                                    <div className="setting-input-group" style={{ marginTop: 8 }}>
+                                                        <label>Model</label>
+                                                        <select
+                                                            value={getAIVal(['improvements', 'gemini', 'model'], 'gemini-2.5-flash')}
+                                                            onChange={(e) => handleAIChange(['improvements', 'gemini', 'model'], e.target.value)}
+                                                            className="form-input"
+                                                        >
+                                                            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                                            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                                                            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {getAIVal(['improvements', 'provider'], getAIVal(['provider'], 'gemini')) === 'openai' && (
+                                                <div style={{ marginTop: 8 }}>
+                                                    <div className="setting-input-group">
+                                                        <label>API Key <span style={{ fontSize: '10px', opacity: 0.6 }}>(leave empty to use main)</span></label>
+                                                        <input
+                                                            type="password"
+                                                            value={getAIVal(['improvements', 'openai', 'apiKey'], '')}
+                                                            onChange={(e) => handleAIChange(['improvements', 'openai', 'apiKey'], e.target.value)}
+                                                            placeholder="Override API Key (optional)"
+                                                            className="form-input"
+                                                        />
+                                                    </div>
+                                                    <div className="setting-input-group" style={{ marginTop: 8 }}>
+                                                        <label>Model</label>
+                                                        <select
+                                                            value={getAIVal(['improvements', 'openai', 'model'], 'gpt-4o-mini')}
+                                                            onChange={(e) => handleAIChange(['improvements', 'openai', 'model'], e.target.value)}
+                                                            className="form-input"
+                                                        >
+                                                            <option value="gpt-4o-mini">gpt-4o-mini</option>
+                                                            <option value="gpt-4o">gpt-4o</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {getAIVal(['improvements', 'provider'], getAIVal(['provider'], 'gemini')) === 'ollama' && (
+                                                <div style={{ marginTop: 8 }}>
+                                                    <div className="setting-input-group">
+                                                        <label>Server URL</label>
+                                                        <input
+                                                            type="text"
+                                                            value={getAIVal(['improvements', 'ollama', 'baseUrl'], getAIVal(['ollama', 'baseUrl'], 'http://localhost:11434'))}
+                                                            onChange={(e) => handleAIChange(['improvements', 'ollama', 'baseUrl'], e.target.value)}
+                                                            placeholder="http://localhost:11434"
+                                                            className="form-input"
+                                                        />
+                                                    </div>
+                                                    <div className="setting-input-group" style={{ marginTop: 8 }}>
+                                                        <label>Model</label>
+                                                        <input
+                                                            type="text"
+                                                            value={getAIVal(['improvements', 'ollama', 'model'], getAIVal(['ollama', 'model'], 'gemma3:4b'))}
+                                                            onChange={(e) => handleAIChange(['improvements', 'ollama', 'model'], e.target.value)}
+                                                            placeholder="Model name"
+                                                            className="form-input"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -544,6 +665,64 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
                     opacity: 0.9;
                     transform: translateY(-1px);
                     box-shadow: 0 4px 12px rgba(var(--accent-color-rgb), 0.3);
+                }
+
+                /* Toggle switch */
+                .switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 44px;
+                    height: 24px;
+                    flex-shrink: 0;
+                }
+                .switch input {
+                    opacity: 0;
+                    width: 0;
+                    height: 0;
+                }
+                .slider {
+                    position: absolute;
+                    cursor: pointer;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background-color: var(--border-color);
+                    transition: .3s;
+                }
+                .slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 18px;
+                    width: 18px;
+                    left: 3px;
+                    bottom: 3px;
+                    background-color: white;
+                    transition: .3s;
+                }
+                input:checked + .slider {
+                    background-color: var(--accent-color);
+                }
+                input:checked + .slider:before {
+                    transform: translateX(20px);
+                }
+                .slider.round {
+                    border-radius: 24px;
+                }
+                .slider.round:before {
+                    border-radius: 50%;
+                }
+
+                .form-input {
+                    width: 100%;
+                    padding: 8px 12px;
+                    background: var(--bg-panel);
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    color: var(--text-primary);
+                    font-size: 0.85rem;
+                    transition: border-color 0.2s;
+                }
+                .form-input:focus {
+                    border-color: var(--accent-color);
+                    outline: none;
                 }
             `}</style>
         </div>

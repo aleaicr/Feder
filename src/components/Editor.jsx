@@ -1,11 +1,12 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Bold, Italic, Underline, Heading1, Heading2, Image, Link, List, Quote, Code, ImagePlus, Sparkles } from 'lucide-react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { Bold, Italic, Underline, Heading1, Heading2, Image, Link, List, Quote, Code, ImagePlus, Sparkles, MessageSquare, BookMarked } from 'lucide-react';
 import { requestInlineSuggestion } from '../utils/aiSuggestions';
 
-export function Editor({ value, onChange, mode, onUploadImage, settings, projectMetadata, onAiThinking, onRegisterCancel }) {
+export function Editor({ value, onChange, mode, onUploadImage, settings, projectMetadata, onAiThinking, onRegisterCancel, onRequestImprovement, onSelectionChange, comments, onAddComment, onCommentPositionsChange, onEditorScrollChange }) {
     const textareaRef = useRef(null);
     const mirrorRef = useRef(null);
     const ghostRef = useRef(null);
+    const positionMirrorRef = useRef(null);
 
     const debounceRef = useRef(null);
     const abortRef = useRef(null);
@@ -17,6 +18,14 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
     const [cursorVersion, setCursorVersion] = useState(0);
     const [caretPos, setCaretPos] = useState({ top: 0, left: 0 });
     const [showCiteMenu, setShowCiteMenu] = useState(false);
+
+    // Improvement/Comment Widget State
+    const [showWidget, setShowWidget] = useState(false);
+    const [selectedText, setSelectedText] = useState('');
+    const [selectionRange, setSelectionRange] = useState(null); // {start, end}
+    const [widgetMenuOpen, setWidgetMenuOpen] = useState(false); // 'improve' | 'none'
+    const [commentInputOpen, setCommentInputOpen] = useState(false);
+    const [newCommentText, setNewCommentText] = useState('');
 
     const insertText = (before, after = '') => {
         const textarea = textareaRef.current;
@@ -60,8 +69,39 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
             start: textarea.selectionStart || 0,
             end: textarea.selectionEnd || 0
         };
+
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = (start !== end) ? textarea.value.substring(start, end) : '';
+
+        if (onSelectionChange) {
+            // Debounce or just update? Update is fine, App handles state.
+            // Actually, too many updates might be heavy if App re-renders.
+            // But Editor is controlled by App state anyway.
+            // Let's just call it.
+            onSelectionChange(text);
+        }
+
+        // Check for selection (Improvement/Comment Widget)
+        if (start !== end) {
+            // Show button if selection is substantial
+            if (text.trim().length > 1) {
+                setSelectedText(text);
+                setSelectionRange({ start, end });
+                setShowWidget(true);
+            } else {
+                setShowWidget(false);
+                setWidgetMenuOpen(false);
+                setCommentInputOpen(false);
+            }
+        } else {
+            setShowWidget(false);
+            setWidgetMenuOpen(false);
+            setCommentInputOpen(false);
+        }
+
         setCursorVersion((v) => v + 1);
-    }, []);
+    }, [onSelectionChange]);
 
     const updateCaretPosition = useCallback(() => {
         const textarea = textareaRef.current;
@@ -141,6 +181,150 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
         updateCursor();
     }, [updateCursor]);
 
+    // --- Compute comment ranges in the text ---
+    const commentRanges = useMemo(() => {
+        if (!comments || comments.length === 0) return [];
+        const ranges = [];
+        comments.forEach(c => {
+            if (c.status === 'resolved') return;
+            let idx = -1;
+            if (c.contextBefore && c.contextAfter) {
+                const strictObj = c.contextBefore + c.selection + c.contextAfter;
+                idx = value.indexOf(strictObj);
+                if (idx !== -1) idx += c.contextBefore.length;
+            }
+            if (idx === -1) idx = value.indexOf(c.selection);
+            if (idx !== -1) {
+                ranges.push({ start: idx, end: idx + c.selection.length, id: c.id, comment: c });
+            }
+        });
+        ranges.sort((a, b) => a.start - b.start);
+        return ranges;
+    }, [comments, value]);
+
+    // --- Build ghost overlay content: full text with highlight spans + suggestion ---
+    const renderGhostContent = () => {
+        const cursorPos = cursorRef.current?.start || 0;
+
+        if (commentRanges.length === 0 && !suggestion) {
+            // Nothing to render in overlay
+            return null;
+        }
+
+        // Merge comment ranges with suggestion insertion point
+        // We need to render the FULL text so alignment is correct
+        let segments = [];
+        let lastIndex = 0;
+
+        // Build highlight segments
+        for (const r of commentRanges) {
+            const rStart = Math.max(r.start, lastIndex);
+            if (rStart > lastIndex) {
+                segments.push({ text: value.substring(lastIndex, rStart), type: 'normal' });
+            }
+            const rEnd = Math.min(r.end, value.length);
+            if (rEnd > rStart) {
+                segments.push({ text: value.substring(rStart, rEnd), type: 'highlight', id: r.id });
+                lastIndex = rEnd;
+            }
+        }
+        if (lastIndex < value.length) {
+            segments.push({ text: value.substring(lastIndex), type: 'normal' });
+        }
+
+        // Now inject suggestion at cursor position
+        if (suggestion) {
+            let charCount = 0;
+            const newSegments = [];
+            let inserted = false;
+            for (const seg of segments) {
+                const segStart = charCount;
+                const segEnd = charCount + seg.text.length;
+                if (!inserted && cursorPos >= segStart && cursorPos <= segEnd) {
+                    const offset = cursorPos - segStart;
+                    if (offset > 0) {
+                        newSegments.push({ ...seg, text: seg.text.substring(0, offset) });
+                    }
+                    newSegments.push({ text: suggestion, type: 'suggestion' });
+                    if (offset < seg.text.length) {
+                        newSegments.push({ ...seg, text: seg.text.substring(offset) });
+                    }
+                    inserted = true;
+                } else {
+                    newSegments.push(seg);
+                }
+                charCount = segEnd;
+            }
+            if (!inserted) {
+                newSegments.push({ text: suggestion, type: 'suggestion' });
+            }
+            segments = newSegments;
+        }
+
+        return segments.map((s, i) => {
+            if (s.type === 'highlight') {
+                return <span key={i} style={{ backgroundColor: 'rgba(255, 215, 0, 0.3)', borderBottom: '2px solid rgba(255, 180, 0, 0.6)' }}>{s.text}</span>;
+            }
+            if (s.type === 'suggestion') {
+                return <span key={i} className="suggestion">{s.text}</span>;
+            }
+            return <span key={i}>{s.text}</span>;
+        });
+    };
+
+    // --- Compute Y positions of comments using a hidden mirror div ---
+    const computeCommentPositions = useCallback(() => {
+        const textarea = textareaRef.current;
+        const mirror = positionMirrorRef.current;
+        if (!textarea || !mirror || commentRanges.length === 0) {
+            if (onCommentPositionsChange) onCommentPositionsChange([]);
+            return;
+        }
+
+        const computed = window.getComputedStyle(textarea);
+        const properties = [
+            'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
+            'lineHeight', 'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+            'whiteSpace', 'wordWrap', 'overflowWrap', 'wordBreak',
+            'letterSpacing', 'wordSpacing', 'tabSize', 'MozTabSize',
+            'textTransform', 'textIndent'
+        ];
+        properties.forEach(prop => { mirror.style[prop] = computed[prop]; });
+        mirror.style.position = 'absolute';
+        mirror.style.top = '0';
+        mirror.style.left = '0';
+        mirror.style.visibility = 'hidden';
+        mirror.style.width = `${textarea.clientWidth}px`;
+        mirror.style.border = 'none';
+        mirror.style.boxSizing = 'border-box';
+        mirror.style.whiteSpace = 'pre-wrap';
+        mirror.style.wordWrap = 'break-word';
+        mirror.style.overflow = 'hidden';
+
+        const positions = [];
+        for (const r of commentRanges) {
+            mirror.textContent = value.substring(0, r.start);
+            const marker = document.createElement('span');
+            marker.textContent = '\u200b';
+            mirror.appendChild(marker);
+            const yTop = marker.offsetTop;
+            positions.push({ id: r.id, y: yTop, comment: r.comment });
+        }
+
+        if (onCommentPositionsChange) onCommentPositionsChange(positions);
+    }, [commentRanges, value, onCommentPositionsChange]);
+
+    useEffect(() => {
+        computeCommentPositions();
+    }, [computeCommentPositions, value, comments]);
+
+    // Recompute on resize        
+    useEffect(() => {
+        const handleResize = () => computeCommentPositions();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [computeCommentPositions]);
+
     const acceptSuggestion = useCallback(() => {
         if (!suggestion) return;
         // Strip leading ellipses if they still appear
@@ -168,15 +352,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
 
     // AI Suggestion Logic
     const fetchSuggestion = useCallback(async () => {
-        const aiGlobal = settings?.ai || {};
-        const aiProject = projectMetadata?.aiConfig || {};
-        const aiConfig = {
-            ...aiGlobal,
-            ...aiProject,
-            openai: { ...(aiGlobal.openai || {}), ...(aiProject.openai || {}) },
-            gemini: { ...(aiGlobal.gemini || {}), ...(aiProject.gemini || {}) },
-            ollama: { ...(aiGlobal.ollama || {}), ...(aiProject.ollama || {}) }
-        };
+        const aiConfig = settings?.ai || {};
 
         if (!aiConfig.enabled) {
             setSuggestion('');
@@ -249,15 +425,15 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
 
     // Automatic Trigger Effect
     useEffect(() => {
-        const aiProject = projectMetadata?.aiConfig || {};
-        const enabled = settings?.ai?.enabled;
-        const triggerMode = aiProject.triggerMode || 'automatic';
+        const ai = settings?.ai || {};
+        const enabled = ai.enabled;
+        const triggerMode = ai.triggerMode || 'manual';
 
         if (!enabled || triggerMode === 'manual') {
             return;
         }
 
-        const debounceMs = aiProject.debounceMs || 1000;
+        const debounceMs = ai.debounceMs || 1500;
 
         if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -269,7 +445,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
         };
-    }, [value, cursorVersion, fetchSuggestion, settings?.ai?.enabled, projectMetadata?.aiConfig]);
+    }, [value, cursorVersion, fetchSuggestion, settings?.ai]);
 
     useEffect(() => {
         if (onRegisterCancel) {
@@ -322,7 +498,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
                 {mode === 'researcher' && (
                     <div className="relative-tool-container" style={{ position: 'relative', display: 'inline-block' }}>
                         <ToolBtn
-                            label="Cite"
+                            icon={<BookMarked size={18} />}
                             onClick={() => setShowCiteMenu(!showCiteMenu)}
                             title="Insert Citation or Reference"
                         />
@@ -363,14 +539,150 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
 
             {/* Text Area */}
             <div className="textarea-wrapper">
-                {/* Mirror for logic only */}
+                {/* Mirror for caret position logic */}
                 <div ref={mirrorRef} className="textarea-mirror" aria-hidden="true" />
+                {/* Hidden mirror for computing comment Y positions */}
+                <div ref={positionMirrorRef} className="textarea-mirror" aria-hidden="true" />
 
-                {/* Ghost Overlay for AI Suggestions */}
+                {/* Ghost Overlay for highlights + AI suggestions */}
                 <div ref={ghostRef} className="ghost-overlay" aria-hidden="true">
-                    {value.substring(0, cursorRef.current?.start || 0)}
-                    {suggestion && <span className="suggestion">{suggestion}</span>}
+                    {renderGhostContent()}
                 </div>
+
+                {/* Improve/Comment Button Widget */}
+                {showWidget && (
+                    <div className="improve-widget" style={{
+                        position: 'absolute',
+                        top: caretPos.top + 25,
+                        left: Math.min(caretPos.left, 500),
+                        zIndex: 100,
+                        backgroundColor: 'var(--bg-panel)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minWidth: '140px'
+                    }} onMouseDown={(e) => e.stopPropagation()}>
+
+                        {!widgetMenuOpen && !commentInputOpen ? (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                {settings?.ai?.enabled && (
+                                    <button
+                                        onClick={() => setWidgetMenuOpen(true)}
+                                        style={{
+                                            border: 'none', background: 'transparent', padding: '6px 12px',
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                                            fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-color)',
+                                            width: '100%', textAlign: 'left'
+                                        }}
+                                        className="widget-btn"
+                                    >
+                                        <Sparkles size={14} /> Improve
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setCommentInputOpen(true)}
+                                    style={{
+                                        border: 'none', background: 'transparent', padding: '6px 12px',
+                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                                        fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)',
+                                        width: '100%', textAlign: 'left'
+                                    }}
+                                    className="widget-btn"
+                                >
+                                    <MessageSquare size={14} /> Comment
+                                </button>
+                            </div>
+                        ) : commentInputOpen ? (
+                            <div style={{ padding: '8px', width: '220px' }}>
+                                <textarea
+                                    autoFocus
+                                    placeholder="Write a comment..."
+                                    value={newCommentText}
+                                    onChange={(e) => setNewCommentText(e.target.value)}
+                                    style={{
+                                        width: '100%', minHeight: '60px', padding: '6px', fontSize: '0.85rem',
+                                        border: '1px solid var(--border-color)', borderRadius: '4px',
+                                        marginBottom: '6px', fontFamily: 'inherit'
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            if (newCommentText.trim()) {
+                                                const start = selectionRange?.start || 0;
+                                                const end = selectionRange?.end || 0;
+                                                // Capture context
+                                                const contextBefore = value.substring(Math.max(0, start - 20), start);
+                                                const contextAfter = value.substring(end, Math.min(value.length, end + 20));
+
+                                                if (onAddComment) {
+                                                    onAddComment(newCommentText, { text: selectedText, start, end, contextBefore, contextAfter });
+                                                }
+                                                setNewCommentText('');
+                                                setCommentInputOpen(false);
+                                                setShowWidget(false);
+                                            }
+                                        }
+                                    }}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+                                    <button onClick={() => setCommentInputOpen(false)} style={{ fontSize: '0.75rem', padding: '4px 8px', border: 'none', background: 'transparent', cursor: 'pointer' }}>Cancel</button>
+                                    <button onClick={() => {
+                                        if (newCommentText.trim()) {
+                                            const start = selectionRange?.start || 0;
+                                            const end = selectionRange?.end || 0;
+                                            const contextBefore = value.substring(Math.max(0, start - 20), start);
+                                            const contextAfter = value.substring(end, Math.min(value.length, end + 20));
+
+                                            if (onAddComment) {
+                                                onAddComment(newCommentText, { text: selectedText, start, end, contextBefore, contextAfter });
+                                            }
+                                            setNewCommentText('');
+                                            setCommentInputOpen(false);
+                                            setShowWidget(false);
+                                        }
+                                    }} style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', border: 'none', background: 'var(--accent-color)', color: 'white', cursor: 'pointer' }}>Add</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="improve-menu" style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div style={{
+                                    padding: '6px 12px',
+                                    fontSize: '0.7rem',
+                                    color: 'var(--text-secondary)',
+                                    fontWeight: 800,
+                                    borderBottom: '1px solid var(--border-color)',
+                                    marginBottom: 2
+                                }}>
+                                    REWRITE AS...
+                                </div>
+                                {['Formality', 'Coherence', 'Longer', 'Shorter'].map(type => (
+                                    <button
+                                        key={type}
+                                        onClick={() => {
+                                            if (onRequestImprovement) {
+                                                onRequestImprovement(selectedText, type.toLowerCase());
+                                            }
+                                            setWidgetMenuOpen(false);
+                                            setShowWidget(false);
+                                        }}
+                                        style={{
+                                            border: 'none', background: 'transparent', padding: '8px 12px',
+                                            textAlign: 'left', cursor: 'pointer', fontSize: '0.85rem',
+                                            color: 'var(--text-primary)',
+                                            display: 'block',
+                                            width: '100%'
+                                        }}
+                                        className="dropdown-item"
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <textarea
                     ref={textareaRef}
@@ -404,13 +716,14 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
                     onSelect={updateCursor}
                     onScroll={(e) => {
                         updateCaretPosition();
+                        const scrollTop = e.target.scrollTop;
                         if (ghostRef.current) {
-                            ghostRef.current.scrollTop = e.target.scrollTop;
+                            ghostRef.current.scrollTop = scrollTop;
                             ghostRef.current.scrollLeft = e.target.scrollLeft;
                         }
+                        if (onEditorScrollChange) onEditorScrollChange(scrollTop);
                     }}
                     onDragOver={(e) => {
-
                         e.preventDefault();
                         e.stopPropagation();
                     }}
@@ -424,7 +737,6 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
                                 const fileInfo = JSON.parse(data);
                                 const { name, path } = fileInfo;
                                 if (name.match(/\.(png|jpg|jpeg|svg|gif)$/i)) {
-                                    // Derive ID from filename (remove extension)
                                     const id = name.replace(/\.[^/.]+$/, "");
                                     insertText(`![Caption of the figure](${path}){#${id} width=100%}`, '');
                                 } else if (name.endsWith('.md')) {
@@ -445,6 +757,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
         </div>
     );
 }
+
 
 function ToolBtn({ icon, label, onClick, title }) {
     return (

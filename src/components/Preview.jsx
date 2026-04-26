@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { ChevronDown, ChevronRight, List } from 'lucide-react';
+import { ChevronDown, ChevronRight, List, FileText, Sparkles, MessageSquare, Check, X as XIcon, RefreshCw, Send, Trash2 } from 'lucide-react';
 
 
 // Helper to split markdown by level 1 headers
@@ -343,7 +343,7 @@ const MarkdownSection = ({ title, content, offset, dirHandle, onUpdateContent, a
     );
 };
 
-function PreviewComponent({ content, metadata, projectMetadata, dirHandle, mode, onUpdateContent, onUpdateMetadata, paperView }) {
+function MarkdownPreview({ content, metadata, projectMetadata, dirHandle, mode, onUpdateContent, onUpdateMetadata, paperView }) {
     const [coverOpen, setCoverOpen] = useState(true);
     const [tocOpen, setTocOpen] = useState(true);
 
@@ -771,12 +771,527 @@ function PreviewComponent({ content, metadata, projectMetadata, dirHandle, mode,
     );
 }
 
-export const Preview = React.memo(PreviewComponent);
+export function PreviewWrapper({ content, metadata, projectMetadata, dirHandle, mode, paperView, onUpdateContent, onUpdateMetadata, activeTab, onTabChange, improvementData, onApplyImprovement, onRetryImprovement, editorSelection, onAddComment, onReplyComment, onResolveComment, onDeleteComment, commentPositions, editorScrollTop }) {
+
+    // Default to visualization if no tab provided
+    const currentTab = activeTab || 'visualization';
+
+    return (
+        <div className="preview-container-wrapper" style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-panel)' }}>
+            {/* Tabs Header */}
+            <div className="preview-tabs-header" style={{
+                display: 'flex', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-app)', padding: '0 8px'
+            }}>
+                <TabButton
+                    active={currentTab === 'visualization'}
+                    onClick={() => onTabChange && onTabChange('visualization')}
+                    icon={<FileText size={16} />}
+                    label="Preview"
+                />
+                <TabButton
+                    active={currentTab === 'improvements'}
+                    onClick={() => onTabChange && onTabChange('improvements')}
+                    icon={<Sparkles size={16} />}
+                    label="Improvements"
+                />
+                <TabButton
+                    active={currentTab === 'comments'}
+                    onClick={() => onTabChange && onTabChange('comments')}
+                    icon={<MessageSquare size={16} />}
+                    label="Comments"
+                />
+            </div>
+
+            {/* Content Area */}
+            <div className="preview-tab-content" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+                {/* Visualization Tab */}
+                <div style={{
+                    height: '100%', overflowY: 'auto',
+                    display: currentTab === 'visualization' ? 'block' : 'none'
+                }}>
+                    <MarkdownPreview
+                        content={content}
+                        metadata={metadata}
+                        projectMetadata={projectMetadata}
+                        dirHandle={dirHandle}
+                        mode={mode}
+                        paperView={paperView}
+                        onUpdateContent={onUpdateContent}
+                        onUpdateMetadata={onUpdateMetadata}
+                    />
+                </div>
+
+                {/* Improvements Tab */}
+                {currentTab === 'improvements' && (
+                    <ImprovementPanel
+                        data={improvementData}
+                        onAccept={() => onApplyImprovement && onApplyImprovement(improvementData.originalText, improvementData.improvedText)}
+                        onRetry={(text, type) => onRetryImprovement && onRetryImprovement(text, type)}
+                        onReject={() => onTabChange && onTabChange('visualization')}
+                    />
+                )}
+
+                {/* Comments Tab */}
+                {currentTab === 'comments' && (
+                    <CommentsPanel
+                        selection={editorSelection}
+                        comments={projectMetadata?.comments || []}
+                        onReply={onReplyComment}
+                        onResolve={onResolveComment}
+                        onDelete={onDeleteComment}
+                        commentPositions={commentPositions}
+                        editorScrollTop={editorScrollTop}
+                    />
+                )}
+            </div>
+        </div>
+    );
+}
+
+function TabButton({ active, onClick, icon, label }) {
+    return (
+        <button
+            onClick={onClick}
+            style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '10px 16px',
+                border: 'none', background: 'transparent',
+                borderBottom: active ? '2px solid var(--accent-color)' : '2px solid transparent',
+                color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                opacity: active ? 1 : 0.7,
+                fontSize: '0.85rem'
+            }}
+        >
+            {icon} <span>{label}</span>
+        </button>
+    )
+}
+
+function ImprovementPanel({ data, onAccept, onRetry, onReject }) {
+    const [retryType, setRetryType] = useState(null);
+
+    if (!data) return null;
+
+    if (data.status === 'loading') {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: 'var(--text-secondary)' }}>
+                <div style={{ width: 28, height: 28, border: '3px solid var(--border-color)', borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                <div style={{ fontSize: '0.9rem' }}>Rewriting as <strong>{data.type}</strong>...</div>
+            </div>
+        );
+    }
+
+    if (data.status === 'error') {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: 'var(--text-secondary)', padding: '0 24px', textAlign: 'center' }}>
+                <XIcon size={32} style={{ color: '#ff4757', opacity: 0.7 }} />
+                <div style={{ fontSize: '0.9rem' }}>Error: {data.error}</div>
+                <button onClick={onRetry} style={{ marginTop: 8, padding: '6px 16px', border: '1px solid var(--border-color)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.85rem' }}>Try Again</button>
+            </div>
+        );
+    }
+
+    if (data.status === 'idle' && !data.originalText) {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, color: 'var(--text-secondary)', padding: '0 24px', textAlign: 'center' }}>
+                <Sparkles size={32} style={{ opacity: 0.3 }} />
+                <div style={{ fontSize: '0.9rem' }}>Select text in the editor, then click <strong>Improve</strong> to see AI suggestions here.</div>
+                <div style={{ fontSize: '0.78rem', opacity: 0.6 }}>You can choose from: Formality, Coherence, Longer, Shorter</div>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ padding: '20px', height: '100%', overflowY: 'auto' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase' }}>
+                Original Text
+            </div>
+            <div style={{
+                padding: '12px', background: 'var(--bg-app)', borderRadius: '8px',
+                border: '1px solid var(--border-color)', fontSize: '0.9rem', lineHeight: '1.6',
+                color: 'var(--text-secondary)', marginBottom: 20, textDecoration: 'line-through', opacity: 0.7
+            }}>
+                {data.originalText}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-color)', marginBottom: 8, textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Improved Version — {data.type}</span>
+                <Sparkles size={14} />
+            </div>
+            <div style={{
+                padding: '14px', background: 'var(--bg-panel)', borderRadius: '8px',
+                border: '1.5px solid var(--accent-color)', fontSize: '0.9rem', lineHeight: '1.6',
+                color: 'var(--text-primary)', marginBottom: 20
+            }}>
+                {data.improvedText}
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <button onClick={onAccept} style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    height: 36, border: 'none', borderRadius: 8,
+                    background: 'var(--accent-color)', color: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600
+                }}>
+                    <Check size={16} /> Accept
+                </button>
+                <button onClick={onReject} style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    height: 36, border: '1px solid #ff4757', borderRadius: 8,
+                    background: 'transparent', color: '#ff4757', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600
+                }}>
+                    <XIcon size={16} /> Reject
+                </button>
+            </div>
+
+            {/* Retry With Different Type */}
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase' }}>
+                Try Another Style
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {['Formality', 'Coherence', 'Longer', 'Shorter'].map(type => (
+                    <button
+                        key={type}
+                        onClick={() => onRetry && onRetry(data.originalText, type.toLowerCase())}
+                        style={{
+                            padding: '5px 14px', borderRadius: 6, fontSize: '0.82rem',
+                            border: type.toLowerCase() === data.type ? '1.5px solid var(--accent-color)' : '1px solid var(--border-color)',
+                            background: type.toLowerCase() === data.type ? 'var(--bg-app)' : 'transparent',
+                            color: type.toLowerCase() === data.type ? 'var(--accent-color)' : 'var(--text-secondary)',
+                            cursor: 'pointer', fontWeight: 500
+                        }}
+                    >
+                        <RefreshCw size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                        {type}
+                    </button>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+function CommentsPanel({ selection, comments, onReply, onResolve, onDelete, commentPositions, editorScrollTop }) {
+    const scrollContainerRef = useRef(null);
+
+    // Sync scroll with editor
+    useEffect(() => {
+        if (scrollContainerRef.current && editorScrollTop !== undefined) {
+            scrollContainerRef.current.scrollTop = editorScrollTop;
+        }
+    }, [editorScrollTop]);
+
+    const openComments = (comments || []).filter(c => c.status !== 'resolved');
+    const resolvedComments = (comments || []).filter(c => c.status === 'resolved');
+
+    // Anti-overlap: position cards so they don't overlap
+    const MIN_GAP = 8;
+    const CARD_MIN_HEIGHT = 120;
+
+    const positioned = useMemo(() => {
+        if (!commentPositions || commentPositions.length === 0) return [];
+        const result = [];
+        let lastBottom = -Infinity;
+
+        for (const cp of commentPositions) {
+            let y = cp.y;
+            if (y < lastBottom + MIN_GAP) {
+                y = lastBottom + MIN_GAP;
+            }
+            result.push({ ...cp, renderY: y });
+            lastBottom = y + CARD_MIN_HEIGHT;
+        }
+        return result;
+    }, [commentPositions]);
+
+    const totalHeight = positioned.length > 0
+        ? Math.max(positioned[positioned.length - 1].renderY + CARD_MIN_HEIGHT + 200, 2000)
+        : 0;
+
+    const hasPositions = positioned.length > 0;
+
+    return (
+        <div className="comments-view" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+            <div style={{ padding: '12px', borderBottom: '1px solid var(--border-color)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {comments.length} Comment{comments.length !== 1 ? 's' : ''}
+            </div>
+
+            {comments.length === 0 && (
+                <div className="empty-state" style={{ textAlign: 'center', marginTop: 40, color: 'var(--text-secondary)', fontSize: '0.9rem', padding: '0 16px' }}>
+                    <MessageSquare size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
+                    <div>No comments yet</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>Select text in editor to add one</div>
+                </div>
+            )}
+
+            {/* Positioned comments - scroll-synced with editor */}
+            {hasPositions && (
+                <div
+                    ref={scrollContainerRef}
+                    style={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        overflowX: 'hidden',
+                        position: 'relative',
+                    }}
+                >
+                    <div style={{ position: 'relative', height: totalHeight, padding: '0 10px' }}>
+                        {positioned.map(p => (
+                            <PositionedCommentCard
+                                key={p.id}
+                                comment={p.comment}
+                                top={p.renderY}
+                                anchorY={p.y}
+                                onReply={onReply}
+                                onResolve={onResolve}
+                                onDelete={onDelete}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Fallback: flat list when no positions are available */}
+            {!hasPositions && openComments.length > 0 && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+                    {openComments.map(c => (
+                        <CommentCard
+                            key={c.id}
+                            comment={c}
+                            onReply={onReply}
+                            onResolve={onResolve}
+                            onDelete={onDelete}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* Resolved comments section - collapsible */}
+            {resolvedComments.length > 0 && (
+                <ResolvedSection
+                    resolvedComments={resolvedComments}
+                    onReply={onReply}
+                    onResolve={onResolve}
+                    onDelete={onDelete}
+                />
+            )}
+        </div>
+    )
+}
+
+function ResolvedSection({ resolvedComments, onReply, onResolve, onDelete }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    return (
+        <div style={{ borderTop: '1px solid var(--border-color)' }}>
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700,
+                    color: 'var(--text-secondary)', background: 'var(--bg-app)',
+                    border: 'none', cursor: 'pointer', textAlign: 'left'
+                }}
+            >
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {resolvedComments.length} Resolved
+            </button>
+            {isExpanded && (
+                <div style={{ maxHeight: '250px', overflowY: 'auto', padding: '8px 10px' }}>
+                    {resolvedComments.map(c => (
+                        <CommentCard
+                            key={c.id}
+                            comment={c}
+                            onReply={onReply}
+                            onResolve={onResolve}
+                            onDelete={onDelete}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function PositionedCommentCard({ comment, top, anchorY, onReply, onResolve, onDelete }) {
+    const [replyText, setReplyText] = useState('');
+    const [isReplying, setIsReplying] = useState(false);
+    const showConnector = Math.abs(top - anchorY) > 4;
+
+    return (
+        <div style={{ position: 'absolute', top, left: 0, right: 0 }}>
+            {/* Connector line from anchor Y to card Y */}
+            {showConnector && (
+                <div style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: anchorY < top ? -(top - anchorY) : 0,
+                    width: 2,
+                    height: Math.abs(top - anchorY),
+                    background: 'rgba(255, 180, 0, 0.3)'
+                }} />
+            )}
+            <div style={{
+                background: 'var(--bg-panel)',
+                border: '1px solid var(--border-color)',
+                borderLeft: '3px solid rgba(255, 180, 0, 0.8)',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                fontSize: '0.85rem',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+            }}>
+                {/* Quoted selection */}
+                <div style={{
+                    fontSize: '0.78rem', color: 'var(--text-secondary)',
+                    fontStyle: 'italic', marginBottom: 6,
+                    borderLeft: '2px solid var(--border-color)', paddingLeft: 8,
+                    maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis'
+                }}>
+                    "{comment.selection && comment.selection.length > 50 ? comment.selection.substring(0, 50) + '...' : comment.selection}"
+                </div>
+
+                {/* Comment text */}
+                <div style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: '0.9rem' }}>{comment.text}</div>
+
+                {/* Replies */}
+                {comment.replies && comment.replies.length > 0 && (
+                    <div style={{ paddingLeft: 10, borderLeft: '1px solid var(--border-color)', marginBottom: 8 }}>
+                        {comment.replies.map(r => (
+                            <div key={r.id} style={{ marginBottom: 6 }}>
+                                <div style={{ fontSize: '0.85rem' }}>{r.text}</div>
+                                <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>{new Date(r.date).toLocaleString()}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 8, fontSize: '0.75rem', opacity: 0.85 }}>
+                    <button onClick={() => setIsReplying(!isReplying)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-color)', fontWeight: 600, fontSize: '0.78rem', padding: 0 }}>
+                        {isReplying ? 'Cancel' : 'Reply'}
+                    </button>
+                    <button onClick={() => onResolve && onResolve(comment.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.78rem', padding: 0 }}>
+                        Resolve
+                    </button>
+                    <button onClick={() => onDelete && onDelete(comment.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.78rem', padding: 0, marginLeft: 'auto' }}>
+                        <Trash2 size={12} />
+                    </button>
+                </div>
+
+                {isReplying && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 4 }}>
+                        <input
+                            value={replyText}
+                            onChange={e => setReplyText(e.target.value)}
+                            placeholder="Reply..."
+                            style={{ flex: 1, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && replyText) {
+                                    onReply && onReply(comment.id, replyText);
+                                    setReplyText('');
+                                    setIsReplying(false);
+                                }
+                            }}
+                        />
+                        <button onClick={() => { if (replyText) { onReply && onReply(comment.id, replyText); setReplyText(''); setIsReplying(false); } }} style={{ border: 'none', background: 'var(--accent-color)', color: 'white', borderRadius: 4, padding: '0 8px', cursor: 'pointer' }}>
+                            <Send size={12} />
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function CommentCard({ comment, onReply, onResolve, onDelete }) {
+    const [replyText, setReplyText] = useState('');
+    const [isReplying, setIsReplying] = useState(false);
+
+    const isResolved = comment.status === 'resolved';
+
+    return (
+        <div className="comment-card" style={{
+            marginBottom: 12, padding: '10px 12px',
+            background: isResolved ? 'var(--bg-app)' : 'var(--bg-panel)',
+            borderRadius: '8px', border: '1px solid var(--border-color)',
+            borderLeft: isResolved ? undefined : '3px solid rgba(255, 180, 0, 0.8)',
+            opacity: isResolved ? 0.7 : 1
+        }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isResolved ? 'var(--text-secondary)' : 'var(--accent-color)' }}>
+                    {isResolved ? 'RESOLVED' : 'OPEN'}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{new Date(comment.date).toLocaleDateString()}</span>
+                    <button onClick={() => onDelete && onDelete(comment.id)} title="Delete" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}><Trash2 size={12} /></button>
+                </div>
+            </div>
+
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', paddingLeft: 8, borderLeft: '2px solid var(--border-color)', marginBottom: 8, fontStyle: 'italic' }}>
+                "{comment.selection && comment.selection.length > 50 ? comment.selection.substring(0, 50) + '...' : comment.selection}"
+            </div>
+
+            <div style={{ fontSize: '0.9rem', marginBottom: 10, color: 'var(--text-primary)' }}>{comment.text}</div>
+
+            {/* Replies */}
+            {comment.replies && comment.replies.length > 0 && (
+                <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '1px solid var(--border-color)' }}>
+                    {comment.replies.map(r => (
+                        <div key={r.id} style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: '0.85rem' }}>{r.text}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{new Date(r.date).toLocaleString()}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Action Bar */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, borderTop: '1px solid var(--border-color)', paddingTop: 8 }}>
+                {!isResolved && (
+                    <button onClick={() => setIsReplying(!isReplying)} style={{ background: 'transparent', border: 'none', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--accent-color)', fontWeight: 600 }}>
+                        {isReplying ? 'Cancel' : 'Reply'}
+                    </button>
+                )}
+                <button onClick={() => onResolve && onResolve(comment.id)} style={{ background: 'transparent', border: 'none', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    {isResolved ? 'Re-open' : 'Resolve'}
+                </button>
+            </div>
+
+            {isReplying && (
+                <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                    <input
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Reply..."
+                        style={{ flex: 1, padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && replyText) {
+                                onReply(comment.id, replyText);
+                                setReplyText('');
+                                setIsReplying(false);
+                            }
+                        }}
+                    />
+                    <button onClick={() => {
+                        if (replyText) {
+                            onReply(comment.id, replyText);
+                            setReplyText('');
+                            setIsReplying(false);
+                        }
+                    }} style={{ border: 'none', background: 'var(--accent-color)', color: 'white', borderRadius: '4px', padding: '0 8px' }}><Send size={12} /></button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+
 
 function AsyncImage({ src, alt, dirHandle, metadata, projectMetadata }) {
     const [imgSrc, setImgSrc] = useState(src);
-
-    // Extract packed metadata from alt
     // Format: Alt Text|width=...|id=...|label=...
     let displayAlt = alt || '';
     let width = null;
@@ -856,3 +1371,5 @@ function AsyncImage({ src, alt, dirHandle, metadata, projectMetadata }) {
         </figure>
     );
 }
+
+export const Preview = React.memo(PreviewWrapper);

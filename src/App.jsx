@@ -12,6 +12,7 @@ import { ImageViewer } from './components/ImageViewer';
 import { ResizablePanels } from './components/ResizablePanels';
 import { useFileSystem } from './hooks/useFileSystem';
 import { generateLatex } from './utils/latexExport';
+import { requestTextImprovement } from './utils/aiSuggestions';
 import { saveProjectHandle, getProjectHandle, saveRecentProject, getRecentProjects, saveSettings, getSettings, saveRecentList } from './utils/db';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { SettingsModal } from './components/SettingsModal';
@@ -35,7 +36,23 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isDirty, setIsDirty] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
+
   const [paperView, setPaperView] = useState(false);
+
+  // Right Panel Tabs State
+  const [rightPanelTab, setRightPanelTab] = useState('visualization'); // 'visualization', 'improvements', 'comments'
+  const [improvementData, setImprovementData] = useState({
+    status: 'idle',
+    originalText: '',
+    improvedText: '',
+    type: '',
+    error: null
+  });
+
+  const [editorSelection, setEditorSelection] = useState('');
+  const [commentPositions, setCommentPositions] = useState([]);
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
+
   const [settings, setSettings] = useState({
 
     name: '',
@@ -140,6 +157,178 @@ function App() {
     };
     loadSettings();
   }, []);
+
+  // --- AI Improvement Handlers ---
+  const handleRequestImprovement = async (text, type) => {
+    if (!text) return;
+
+    setRightPanelTab('improvements');
+    setImprovementData({
+      status: 'loading',
+      originalText: text,
+      improvedText: '',
+      type,
+      error: null
+    });
+
+    // Build AI config from settings.ai (single source of truth)
+    const ai = settings?.ai || {};
+    const imp = ai.improvements || {};
+    const useSeparate = imp.separate;
+
+    // Use improvement-specific provider if separate, otherwise main
+    const provider = useSeparate ? (imp.provider || ai.provider || 'gemini') : (ai.provider || 'gemini');
+
+    const aiConfig = {
+      enabled: true,
+      provider,
+      gemini: useSeparate
+        ? { apiKey: imp.gemini?.apiKey || ai.gemini?.apiKey, model: imp.gemini?.model || ai.gemini?.model }
+        : { ...(ai.gemini || {}) },
+      openai: useSeparate
+        ? { apiKey: imp.openai?.apiKey || ai.openai?.apiKey, model: imp.openai?.model || ai.openai?.model }
+        : { ...(ai.openai || {}) },
+      ollama: useSeparate
+        ? { baseUrl: imp.ollama?.baseUrl || ai.ollama?.baseUrl, model: imp.ollama?.model || ai.ollama?.model }
+        : { ...(ai.ollama || {}) }
+    };
+
+    setIsAiThinking(true);
+    try {
+      const result = await requestTextImprovement({
+        aiConfig,
+        text,
+        type
+      });
+
+      if (result) {
+        setImprovementData(prev => ({ ...prev, status: 'success', improvedText: result }));
+      } else {
+        setImprovementData(prev => ({ ...prev, status: 'error', error: 'No response generated.' }));
+      }
+    } catch (e) {
+      setImprovementData(prev => ({ ...prev, status: 'error', error: e.message }));
+    } finally {
+      setIsAiThinking(false);
+    }
+  };
+
+  const handleApplyImprovement = (original, improved) => {
+    // Simple string replacement. 
+    // Note: This relies on the text being unique enough or user accepting the first match.
+    setContent(prev => prev.replace(original, improved));
+    setPreviewContent(prev => prev.replace(original, improved)); // Immediate update
+    setRightPanelTab('visualization');
+    setImprovementData({ status: 'idle', originalText: '', improvedText: '' });
+  };
+
+  const handleAddComment = async (text, selectionInfo) => {
+    // selectionInfo comes from Editor: { text, start, end, contextBefore, contextAfter }
+    if (!text || !selectionInfo) return;
+
+    const newComment = {
+      id: Date.now().toString(),
+      text,
+      selection: selectionInfo.text,
+      contextBefore: selectionInfo.contextBefore,
+      contextAfter: selectionInfo.contextAfter,
+      status: 'open', // 'open' | 'resolved'
+      replies: [],
+      date: new Date().toISOString()
+    };
+
+    const newComments = [...(projectMetadata.comments || []), newComment];
+    updateProjectComments(newComments);
+    setRightPanelTab('comments');
+  };
+
+  const handleReplyComment = (commentId, replyText) => {
+    const newComments = (projectMetadata.comments || []).map(c => {
+      if (c.id === commentId) {
+        return {
+          ...c,
+          replies: [...(c.replies || []), {
+            id: Date.now().toString(),
+            text: replyText,
+            date: new Date().toISOString()
+          }]
+        };
+      }
+      return c;
+    });
+    updateProjectComments(newComments);
+  };
+
+  const handleResolveComment = (commentId) => {
+    const newComments = (projectMetadata.comments || []).map(c => {
+      if (c.id === commentId) {
+        return { ...c, status: c.status === 'open' ? 'resolved' : 'open' };
+      }
+      return c;
+    });
+    updateProjectComments(newComments);
+  };
+
+  const handleDeleteComment = (commentId) => {
+    const newComments = (projectMetadata.comments || []).filter(c => c.id !== commentId);
+    updateProjectComments(newComments);
+  };
+
+  const updateProjectComments = async (newComments) => {
+    const newMeta = { ...projectMetadata, comments: newComments };
+    setProjectMetadata(newMeta);
+    if (dirHandle) {
+      try {
+        await writeFileInDir(dirHandle, 'project_metadata.json', JSON.stringify(newMeta, null, 2));
+      } catch (e) { console.error(e); }
+    }
+  };
+
+  // Validate comments against content on change (remove orphaned)
+  // We use a debounced effect usually, or checking inside Editor rendering.
+  // Ideally, Editor tells us which comments are valid.
+  // For now, let's keep all and rely on Editor to visualize valid ones. 
+  // User Requirement: "if text being commented is removed, then the comment is removed too"
+  // We can check this when content updates or periodically. 
+  useEffect(() => {
+    if (!content || !projectMetadata.comments) return;
+
+    const validComments = projectMetadata.comments.filter(c => {
+      if (c.status === 'resolved') return true; // Keep resolved? or remove? "if text removed... comment removed".
+      // Let's strict check: if we can't find anchor, remove.
+      // Try strict context match first
+      const strictSearch = c.contextBefore + c.selection + c.contextAfter;
+      if (content.includes(strictSearch)) return true;
+
+      // Try loose match (just selection) - Dangerous for duplicates?
+      // User might edit context. 
+      // Let's require at least selection existence.
+      if (content.includes(c.selection)) return true;
+
+      return false;
+    });
+
+    if (validComments.length !== projectMetadata.comments.length) {
+      // Avoid infinite loops, maybe debounce this or only run on save?
+      // Running on every render might be too aggressive if user is typing "around" it.
+      // Let's NOT auto-delete instantly while typing. 
+      // Maybe only validate on file load or explicit "Clean" action? 
+      // Or just don't render them (ghost-overlay handles this).
+      // The user said "comment IS removed", implying data deletion.
+      // Let's stick to: If checking strictly is too hard, we just filter existing ones.
+      // We will update the DB only if significantly different.
+
+      // For stability, let's defer this or make it a separate maintenance task.
+      // But for the user request, I will implement a check.
+      const timer = setTimeout(() => {
+        updateProjectComments(validComments);
+      }, 2000); // 2 seconds of "missing" text before deletion
+      return () => clearTimeout(timer);
+    }
+  }, [content, projectMetadata.comments]);
+
+
+
 
   const handleOpenRecent = async (project) => {
     if (!project) return;
@@ -1180,7 +1369,13 @@ function App() {
             settings={settings}
             projectMetadata={projectMetadata}
             onAiThinking={setIsAiThinking}
+            onRequestImprovement={handleRequestImprovement}
+            onSelectionChange={setEditorSelection}
             onRegisterCancel={(fn) => { cancelAiRef.current = fn; }}
+            comments={projectMetadata?.comments || []}
+            onAddComment={handleAddComment}
+            onCommentPositionsChange={setCommentPositions}
+            onEditorScrollChange={setEditorScrollTop}
           />
         </div>
       )}
@@ -1202,7 +1397,24 @@ function App() {
       paperView={paperView}
       onUpdateContent={handleUpdateFromPreview}
 
+
       onUpdateMetadata={setMetadata}
+
+      // Tabs & Improvements
+      activeTab={rightPanelTab}
+      onTabChange={setRightPanelTab}
+      improvementData={improvementData}
+      onApplyImprovement={handleApplyImprovement}
+      onRetryImprovement={(text, type) => handleRequestImprovement(text, type)}
+
+      // Comments
+      editorSelection={editorSelection}
+      onAddComment={handleAddComment}
+      onReplyComment={handleReplyComment}
+      onResolveComment={handleResolveComment}
+      onDeleteComment={handleDeleteComment}
+      commentPositions={commentPositions}
+      editorScrollTop={editorScrollTop}
     />
   );
 

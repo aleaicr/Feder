@@ -135,6 +135,96 @@ const requestOllama = async ({ baseUrl, model, prefix, suffix, maxWords, signal 
 };
 
 
+// --- GENERIC CHAT REQUESTS FOR IMPROVEMENTS ---
+
+const requestGeminiChat = async ({ apiKey, model, systemPrompt, userPrompt, signal }) => {
+    if (!apiKey) throw new Error('Missing Gemini API key');
+    const safeModel = model || 'gemini-2.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(safeModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [
+                { role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }
+            ],
+            generationConfig: {
+                temperature: 0.7
+            }
+        }),
+        signal
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini error: ${errText}`);
+    }
+    const data = await response.json();
+    return data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
+        ? data.candidates[0].content.parts.map((p) => p.text || '').join('')
+        : '';
+};
+
+const requestOpenAIChat = async ({ apiKey, model, systemPrompt, userPrompt, signal }) => {
+    if (!apiKey) throw new Error('Missing OpenAI API key');
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: model || 'gpt-4o-mini',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7
+        }),
+        signal
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`OpenAI error: ${errText}`);
+    }
+
+    const data = await response.json();
+    return data && data.choices && data.choices[0] && data.choices[0].message
+        ? data.choices[0].message.content
+        : '';
+};
+
+const requestOllamaChat = async ({ baseUrl, model, systemPrompt, userPrompt, signal }) => {
+    const url = (baseUrl || 'http://localhost:11434').replace(/\/$/, '');
+
+    const response = await fetch(`${url}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: model || 'llama3',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            stream: false,
+            options: { temperature: 0.7 }
+        }),
+        signal
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Ollama error: ${errText}`);
+    }
+
+    const data = await response.json();
+    return data && data.message ? data.message.content : '';
+};
+
+
 // --- MAIN EXPORT ---
 export const requestInlineSuggestion = async ({ aiConfig, prefix, suffix, mode, signal }) => {
     if (!aiConfig || !aiConfig.enabled) return '';
@@ -178,6 +268,50 @@ export const requestInlineSuggestion = async ({ aiConfig, prefix, suffix, mode, 
             maxWords,
             signal
         });
+    }
+
+    return '';
+};
+
+export const requestTextImprovement = async ({ aiConfig, text, type, signal }) => {
+    if (!aiConfig || !aiConfig.enabled || !text) return '';
+
+    // Determine instructions based on type
+    let systemPrompt = 'You are a helpful writing assistant.';
+    switch (type) {
+        case 'formality':
+            systemPrompt = 'You are a professional editor. Rewrite the text to be more formal, polite, and professional. Maintain the original meaning.';
+            break;
+        case 'coherence':
+            systemPrompt = 'You are a professional editor. Rewrite the text to be more coherent, logical, and easy to follow. Improve the flow.';
+            break;
+        case 'longer':
+            systemPrompt = 'You are a creative writing assistant. Expand the text to be longer and more detailed. Add relevant context and descriptions while maintaining the original core meaning.';
+            break;
+        case 'shorter':
+            systemPrompt = 'You are a concise editor. Condense the text to be shorter and punchier. Remove unnecessary words while keeping key information.';
+            break;
+        default:
+            systemPrompt = 'Improve the following text.';
+    }
+
+    const userPrompt = `Original Text:\n"${text}"\n\nReturn ONLY the rewritten text:`;
+
+    // Use specific improvement config if available, otherwise global/default
+    // The UI might pass a modified aiConfig that already has the correct provider/model selected for improvements
+    const provider = aiConfig.provider || 'gemini';
+
+    if (provider === 'gemini') {
+        const conf = aiConfig.gemini || {};
+        return await requestGeminiChat({ apiKey: conf.apiKey, model: conf.model, systemPrompt, userPrompt, signal });
+    }
+    if (provider === 'openai') {
+        const conf = aiConfig.openai || {};
+        return await requestOpenAIChat({ apiKey: conf.apiKey, model: conf.model, systemPrompt, userPrompt, signal });
+    }
+    if (provider === 'ollama') {
+        const conf = aiConfig.ollama || {};
+        return await requestOllamaChat({ baseUrl: conf.baseUrl, model: conf.model, systemPrompt, userPrompt, signal });
     }
 
     return '';
