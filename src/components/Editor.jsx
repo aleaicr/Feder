@@ -354,7 +354,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
     const fetchSuggestion = useCallback(async () => {
         const aiConfig = settings?.ai || {};
 
-        if (!aiConfig.enabled) {
+        if (!aiConfig.enabled || aiConfig.inlineSuggestions?.enabled === false) {
             setSuggestion('');
             if (onAiThinking) onAiThinking(false);
             setIsSuggesting(false);
@@ -426,7 +426,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
     // Automatic Trigger Effect
     useEffect(() => {
         const ai = settings?.ai || {};
-        const enabled = ai.enabled;
+        const enabled = ai.enabled && ai.inlineSuggestions?.enabled !== false;
         const triggerMode = ai.triggerMode || 'manual';
 
         if (!enabled || triggerMode === 'manual') {
@@ -488,7 +488,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
                 <ToolBtn icon={<Image size={18} />} onClick={() => insertText('![Caption of the figure]', '(path_to_figure){#label_figure width=100%}')} title="Image (Text)" />
                 <ToolBtn icon={<ImagePlus size={18} />} onClick={handleImageUpload} title="Upload Image" />
                 <div className="divider"></div>
-                {settings?.ai?.enabled && (
+                {settings?.ai?.enabled && settings?.ai?.inlineSuggestions?.enabled !== false && (
                     <ToolBtn icon={<Sparkles size={18} />} onClick={() => {
                         lastContextRef.current = '';
                         fetchSuggestion();
@@ -567,7 +567,7 @@ export function Editor({ value, onChange, mode, onUploadImage, settings, project
 
                         {!widgetMenuOpen && !commentInputOpen ? (
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                {settings?.ai?.enabled && (
+                                {settings?.ai?.enabled && settings?.ai?.improvements?.enabled !== false && (
                                     <button
                                         onClick={() => setWidgetMenuOpen(true)}
                                         style={{

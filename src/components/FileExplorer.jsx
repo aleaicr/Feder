@@ -1,5 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Folder, FileText, ChevronRight, ChevronDown, Image as ImageIcon, FileJson, ExternalLink, FilePlus, FolderPlus, Edit2, Check, X, Trash2 } from 'lucide-react';
+
+const SPECIAL_SECTIONS = [
+    { key: 'notes', label: 'NOTES' },
+    { key: 'ideas', label: 'IDEAS' },
+    { key: 'figures', label: 'FIGURES' },
+    { key: 'references', label: 'REFERENCES' }
+];
 
 export function FileExplorer({
     dirHandle,
@@ -25,6 +32,12 @@ export function FileExplorer({
     const [draggedNode, setDraggedNode] = useState(null);
     const [draggedPath, setDraggedPath] = useState(null);
     const [dropTarget, setDropTarget] = useState(null); // { path, position: 'before' | 'after' | 'inside' }
+    const [bottomSectionsOpen, setBottomSectionsOpen] = useState({
+        notes: true,
+        ideas: true,
+        figures: true,
+        references: true
+    });
 
     // Sync expanded state when initial prop changes (usually on project open)
     useEffect(() => {
@@ -161,6 +174,38 @@ export function FileExplorer({
         });
     };
 
+    const { mainFiles, specialFolders } = useMemo(() => {
+        const sectionsByName = Object.fromEntries(SPECIAL_SECTIONS.map(section => [section.key, null]));
+        const regular = [];
+
+        for (const node of files) {
+            if (node.kind === 'directory' && Object.prototype.hasOwnProperty.call(sectionsByName, node.name.toLowerCase())) {
+                sectionsByName[node.name.toLowerCase()] = node;
+                continue;
+            }
+            regular.push(node);
+        }
+
+        return { mainFiles: regular, specialFolders: sectionsByName };
+    }, [files]);
+
+    const toggleBottomSection = (section) => {
+        setBottomSectionsOpen((prev) => ({
+            ...prev,
+            [section]: !prev[section]
+        }));
+    };
+
+    const handleCreateFileInFolder = async (folderHandle, folderPath, suggestedName = 'newfile.md') => {
+        if (!onCreateFile) return;
+        await onCreateFile(folderHandle, folderPath, suggestedName);
+    };
+
+    const handleCreateFolderInFolder = async (folderHandle, folderPath) => {
+        if (!onCreateFolder) return;
+        await onCreateFolder(folderHandle, folderPath);
+    };
+
     const handleDragStart = (e, node, path, parentPath) => {
         e.stopPropagation();
         setDraggedNode(node);
@@ -293,7 +338,7 @@ export function FileExplorer({
     // Helper to get all item names in a specific path
     const getAllItemNamesInPath = (parentPath) => {
         if (parentPath === '/' || parentPath === '') {
-            return files.map(f => f.name);
+            return mainFiles.map(f => f.name);
         }
 
         // Navigate to the parent folder
@@ -365,12 +410,14 @@ export function FileExplorer({
 
     const renderTree = (nodes, pathPrefix = '') => {
         return nodes.map((node, index) => {
+            const path = `${pathPrefix}/${node.name}`;
+
             if (node.kind === 'file') {
                 if (node.name === 'project_metadata.json') return null;
-                if (node.name.endsWith('.bib') && mode !== 'researcher') return null;
+                const inReferencesFolder = path.toLowerCase().startsWith('/references/');
+                if (node.name.endsWith('.bib') && mode !== 'researcher' && !inReferencesFolder) return null;
             }
 
-            const path = `${pathPrefix}/${node.name}`;
             const isExpanded = expandedFolders[path];
             const isDropTarget = dropTarget?.path === path;
             const dropPosition = isDropTarget ? dropTarget.position : null;
@@ -423,6 +470,20 @@ export function FileExplorer({
                                 <>
                                     <span style={{ flex: 1 }}>{node.name}</span>
                                     <div className="explorer-actions" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                            className="btn-icon small"
+                                            title="New File in Folder"
+                                            onClick={() => handleCreateFileInFolder(node.handle, path, node.name.toLowerCase() === 'references' ? 'references.bib' : 'newfile.md')}
+                                        >
+                                            <FilePlus size={12} />
+                                        </button>
+                                        <button
+                                            className="btn-icon small"
+                                            title="New Subfolder"
+                                            onClick={() => handleCreateFolderInFolder(node.handle, path)}
+                                        >
+                                            <FolderPlus size={12} />
+                                        </button>
                                         <button className="btn-icon small" title="Rename" onClick={() => {
                                             setEditingPath(path);
                                             setTempName(node.name);
@@ -531,28 +592,76 @@ export function FileExplorer({
                     </button>
                 </div>
             </div>
-            <div
-                className="file-list"
-                onDragOver={(e) => {
-                    e.preventDefault();
-                    // Allow dropping at the end of the list
-                    if (draggedNode && files.length > 0) {
-                        const lastFile = files[files.length - 1];
-                        setDropTarget({ path: `/${lastFile.name}`, parentPath: '', position: 'after' });
-                    }
-                }}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    if (draggedNode && dropTarget) {
-                        handleDrop(e, dropTarget.path, '', null);
-                    } else if (draggedNode && onMove) {
-                        // Fallback: move to root
-                        onMove(draggedNode.handle, dirHandle);
-                    }
-                    handleDragEnd();
-                }}
-            >
-                {renderTree(files)}
+            <div className="file-explorer-content">
+                <div
+                    className="file-list"
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        // Allow dropping at the end of the main list
+                        if (draggedNode && mainFiles.length > 0) {
+                            const lastFile = mainFiles[mainFiles.length - 1];
+                            setDropTarget({ path: `/${lastFile.name}`, parentPath: '', position: 'after' });
+                        }
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedNode && dropTarget) {
+                            handleDrop(e, dropTarget.path, '', null);
+                        } else if (draggedNode && onMove) {
+                            // Fallback: move to root
+                            onMove(draggedNode.handle, dirHandle);
+                        }
+                        handleDragEnd();
+                    }}
+                >
+                    {renderTree(mainFiles)}
+                </div>
+
+                {SPECIAL_SECTIONS.some((section) => !!specialFolders[section.key]) && (
+                    <div className="explorer-bottom-sections">
+                        {SPECIAL_SECTIONS.map((section) => {
+                            const folderNode = specialFolders[section.key];
+                            if (!folderNode) return null;
+
+                            return (
+                                <div className="explorer-bottom-section" key={section.key}>
+                                    <div className="explorer-bottom-header">
+                                        <button
+                                            className="explorer-bottom-toggle"
+                                            onClick={() => toggleBottomSection(section.key)}
+                                            type="button"
+                                        >
+                                            {bottomSectionsOpen[section.key] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                            <span>{section.label}</span>
+                                        </button>
+                                        <div className="explorer-actions" onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                                className="btn-icon small"
+                                                title={`New File in ${folderNode.name}`}
+                                                onClick={() => handleCreateFileInFolder(folderNode.handle, `/${folderNode.name}`, section.key === 'references' ? 'references.bib' : 'newfile.md')}
+                                            >
+                                                <FilePlus size={12} />
+                                            </button>
+                                            <button
+                                                className="btn-icon small"
+                                                title={`New Folder in ${folderNode.name}`}
+                                                onClick={() => handleCreateFolderInFolder(folderNode.handle, `/${folderNode.name}`)}
+                                            >
+                                                <FolderPlus size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {bottomSectionsOpen[section.key] && (
+                                        <div className="explorer-bottom-content file-list">
+                                            {renderTree(folderNode.children || [], `/${folderNode.name}`)}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

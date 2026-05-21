@@ -111,6 +111,35 @@ export function SettingsModal({ onClose, metadata, onUpdate, mode, settings, onU
 
                             {getAIVal(['enabled'], false) && (
                                 <div style={{ marginTop: 20 }}>
+                                    <div className="setting-row" style={{ marginBottom: 16 }}>
+                                        <div className="setting-info">
+                                            <span className="setting-name" style={{ fontSize: '0.9rem' }}>Enable Text Improvements</span>
+                                            <span className="setting-desc">Show improvements tab in preview panel</span>
+                                        </div>
+                                        <label className="switch">
+                                            <input
+                                                type="checkbox"
+                                                checked={getAIVal(['improvements', 'enabled'], true)}
+                                                onChange={(e) => handleAIChange(['improvements', 'enabled'], e.target.checked)}
+                                            />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+                                    <div className="setting-row" style={{ marginBottom: 16, borderBottom: '1px solid var(--border-color)', paddingBottom: 16 }}>
+                                        <div className="setting-info">
+                                            <span className="setting-name" style={{ fontSize: '0.9rem' }}>Enable Inline Suggestions</span>
+                                            <span className="setting-desc">Allow AI to suggest text as you type</span>
+                                        </div>
+                                        <label className="switch">
+                                            <input
+                                                type="checkbox"
+                                                checked={getAIVal(['inlineSuggestions', 'enabled'], true)}
+                                                onChange={(e) => handleAIChange(['inlineSuggestions', 'enabled'], e.target.checked)}
+                                            />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+                                    
                                     {/* Provider */}
                                     <div className="setting-input-group">
                                         <label>Provider</label>

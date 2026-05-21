@@ -38,6 +38,9 @@ function App() {
   const [isAiThinking, setIsAiThinking] = useState(false);
 
   const [paperView, setPaperView] = useState(false);
+  const [hasNotesDir, setHasNotesDir] = useState(false);
+  const [notesList, setNotesList] = useState([]);
+  const [hasIdeasDir, setHasIdeasDir] = useState(false);
 
   // Right Panel Tabs State
   const [rightPanelTab, setRightPanelTab] = useState('visualization'); // 'visualization', 'improvements', 'comments'
@@ -132,6 +135,99 @@ function App() {
     };
     loadProjectMeta();
   }, [dirHandle]);
+
+  const scanNotesDir = useCallback(async () => {
+    if (!dirHandle) {
+      setHasNotesDir(false);
+      setNotesList([]);
+      return;
+    }
+    try {
+      let notesDirHandle = null;
+      try {
+        notesDirHandle = await dirHandle.getDirectoryHandle('notes');
+      } catch (e) {
+        setHasNotesDir(false);
+        setNotesList([]);
+        return;
+      }
+
+      if (notesDirHandle) {
+        setHasNotesDir(true);
+        const list = [];
+
+        const recurse = async (handle, pathPrefix = '') => {
+          for await (const entry of handle.values()) {
+            if (entry.kind === 'file' && entry.name.endsWith('.md')) {
+              const relPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+              try {
+                const file = await entry.getFile();
+                const text = await file.text();
+                let frontmatter = {};
+                if (text.trim().startsWith('---')) {
+                  const parts = text.split('---');
+                  if (parts.length >= 3) {
+                    frontmatter = yaml.load(parts[1]) || {};
+                  }
+                }
+                list.push({
+                  name: entry.name,
+                  relPath,
+                  handle: entry,
+                  frontmatter,
+                  title: frontmatter.title || entry.name.replace(/\.md$/, ''),
+                  links: frontmatter.links || [],
+                  tags: frontmatter.tags || [],
+                  color: frontmatter.color || null,
+                  folder: pathPrefix || 'root'
+                });
+              } catch (readErr) {
+                console.error('Failed to parse note:', relPath, readErr);
+              }
+            } else if (entry.kind === 'directory') {
+              const nextPrefix = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+              await recurse(entry, nextPrefix);
+            }
+          }
+        };
+
+        await recurse(notesDirHandle, '');
+        setNotesList(list);
+      }
+    } catch (err) {
+      console.error('Error scanning notes folder:', err);
+      setHasNotesDir(false);
+      setNotesList([]);
+    }
+  }, [dirHandle]);
+
+  const scanIdeasDir = useCallback(async () => {
+    if (!dirHandle) {
+      setHasIdeasDir(false);
+      return;
+    }
+    try {
+      let ideasDirHandle = null;
+      try {
+        ideasDirHandle = await dirHandle.getDirectoryHandle('ideas');
+      } catch (e) {
+        setHasIdeasDir(false);
+        return;
+      }
+
+      if (ideasDirHandle) {
+        setHasIdeasDir(true);
+      }
+    } catch (err) {
+      console.error('Error scanning ideas folder:', err);
+      setHasIdeasDir(false);
+    }
+  }, [dirHandle]);
+
+  useEffect(() => {
+    scanNotesDir();
+    scanIdeasDir();
+  }, [dirHandle, refreshTrigger, scanNotesDir, scanIdeasDir]);
 
   // Load recent projects
   useEffect(() => {
@@ -728,6 +824,7 @@ function App() {
           }
         }
       }
+      await scanNotesDir();
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('Save failed', err);
@@ -1248,9 +1345,11 @@ function App() {
     return {};
   };
 
-  const handleCreateFile = async () => {
-    if (!dirHandle) return;
-    const name = prompt('File name:', 'newfile.md');
+  const handleCreateFile = async (targetDirHandle = null, targetPath = '', suggestedName = 'newfile.md') => {
+    const destination = targetDirHandle || dirHandle;
+    if (!destination) return;
+    const inFolderHint = targetPath ? ` in ${targetPath}` : '';
+    const name = prompt(`File name${inFolderHint}:`, suggestedName);
     if (name) {
       let initialContent = '';
       if (name.endsWith('.md')) {
@@ -1259,7 +1358,7 @@ function App() {
           initialContent = `---\n${yaml.dump(defaults)}---\n\n# ${name.replace('.md', '')}\n\n`;
         }
       }
-      await writeFileInDir(dirHandle, name, initialContent);
+      await writeFileInDir(destination, name, initialContent);
       setRefreshTrigger(prev => prev + 1);
     }
   };
@@ -1276,11 +1375,13 @@ function App() {
   };
 
 
-  const handleCreateFolder = async () => {
-    if (!dirHandle) return;
-    const name = prompt('Folder name:', 'new-folder');
+  const handleCreateFolder = async (targetDirHandle = null, targetPath = '') => {
+    const destination = targetDirHandle || dirHandle;
+    if (!destination) return;
+    const inFolderHint = targetPath ? ` in ${targetPath}` : '';
+    const name = prompt(`Folder name${inFolderHint}:`, 'new-folder');
     if (name) {
-      await createSubDir(dirHandle, name);
+      await createSubDir(destination, name);
       setRefreshTrigger(prev => prev + 1);
     }
   };
@@ -1354,7 +1455,15 @@ function App() {
       </div>
 
       {currentFile.kind === 'md' && showMetadata && (
-        <MetadataForm mode={mode} metadata={metadata} onChange={setMetadata} />
+        <MetadataForm
+          mode={mode}
+          metadata={metadata}
+          onChange={setMetadata}
+          isNote={currentFile.name && (currentFile.name.startsWith('notes/') || currentFile.name.includes('/notes/'))}
+          isIdea={currentFile.name && (currentFile.name.startsWith('ideas/') || currentFile.name.includes('/ideas/'))}
+          notesList={notesList || []}
+          currentFilename={currentFile.name}
+        />
       )}
 
       {currentFile.kind === 'image' ? (
@@ -1389,6 +1498,7 @@ function App() {
 
   const renderRight = () => (
     <Preview
+      settings={settings}
       content={previewContent}
       metadata={metadata}
       projectMetadata={projectMetadata}
@@ -1396,7 +1506,6 @@ function App() {
       mode={mode}
       paperView={paperView}
       onUpdateContent={handleUpdateFromPreview}
-
 
       onUpdateMetadata={setMetadata}
 
@@ -1415,6 +1524,18 @@ function App() {
       onDeleteComment={handleDeleteComment}
       commentPositions={commentPositions}
       editorScrollTop={editorScrollTop}
+
+      // Notes Graph
+      hasNotesDir={hasNotesDir}
+      notesList={notesList}
+      onFileSelect={handleFileSelect}
+      currentFilename={currentFile.name}
+
+      // Ideas Graph
+      hasIdeasDir={hasIdeasDir}
+      isEditingNote={!!(currentFile.name && (currentFile.name.startsWith('notes/') || currentFile.name.includes('/notes/')))}
+      isEditingIdea={!!(currentFile.name && (currentFile.name.startsWith('ideas/') || currentFile.name.includes('/ideas/')))}
+      currentFileContent={content}
     />
   );
 

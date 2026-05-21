@@ -4,7 +4,9 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { ChevronDown, ChevronRight, List, FileText, Sparkles, MessageSquare, Check, X as XIcon, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, List, FileText, Sparkles, MessageSquare, Check, X as XIcon, RefreshCw, Send, Trash2, Network, Lightbulb } from 'lucide-react';
+import { NotesGraph } from './NotesGraph';
+import { IdeasGraph } from './IdeasGraph';
 
 
 // Helper to split markdown by level 1 headers
@@ -771,10 +773,32 @@ function MarkdownPreview({ content, metadata, projectMetadata, dirHandle, mode, 
     );
 }
 
-export function PreviewWrapper({ content, metadata, projectMetadata, dirHandle, mode, paperView, onUpdateContent, onUpdateMetadata, activeTab, onTabChange, improvementData, onApplyImprovement, onRetryImprovement, editorSelection, onAddComment, onReplyComment, onResolveComment, onDeleteComment, commentPositions, editorScrollTop }) {
+export function PreviewWrapper({ settings, content, metadata, projectMetadata, dirHandle, mode, paperView, onUpdateContent, onUpdateMetadata, activeTab, onTabChange, improvementData, onApplyImprovement, onRetryImprovement, editorSelection, onAddComment, onReplyComment, onResolveComment, onDeleteComment, commentPositions, editorScrollTop, hasNotesDir, notesList, onFileSelect, currentFilename, hasIdeasDir, isEditingNote, isEditingIdea, currentFileContent }) {
 
     // Default to visualization if no tab provided
     const currentTab = activeTab || 'visualization';
+
+    // Auto-switch away from graph tabs when context changes
+    React.useEffect(() => {
+        if (currentTab === 'graph' && !isEditingNote) {
+            onTabChange && onTabChange('visualization');
+        }
+        if (currentTab === 'ideas-graph' && !isEditingIdea) {
+            onTabChange && onTabChange('visualization');
+        }
+        
+        const aiGlobal = settings?.ai || {};
+        const isAiEnabled = aiGlobal.enabled;
+        const isImprovementsEnabled = aiGlobal.improvements?.enabled !== false;
+        if (currentTab === 'improvements' && (!isAiEnabled || !isImprovementsEnabled)) {
+            onTabChange && onTabChange('visualization');
+        }
+    }, [isEditingNote, isEditingIdea, currentTab, onTabChange, settings]);
+
+    const aiGlobal = settings?.ai || {};
+    const isAiEnabled = aiGlobal.enabled;
+    const isImprovementsEnabled = aiGlobal.improvements?.enabled !== false;
+    const showImprovements = isAiEnabled && isImprovementsEnabled;
 
     return (
         <div className="preview-container-wrapper" style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg-panel)' }}>
@@ -788,12 +812,30 @@ export function PreviewWrapper({ content, metadata, projectMetadata, dirHandle, 
                     icon={<FileText size={16} />}
                     label="Preview"
                 />
-                <TabButton
-                    active={currentTab === 'improvements'}
-                    onClick={() => onTabChange && onTabChange('improvements')}
-                    icon={<Sparkles size={16} />}
-                    label="Improvements"
-                />
+                {hasNotesDir && isEditingNote && (
+                    <TabButton
+                        active={currentTab === 'graph'}
+                        onClick={() => onTabChange && onTabChange('graph')}
+                        icon={<Network size={16} />}
+                        label="Notes Graph"
+                    />
+                )}
+                {hasIdeasDir && isEditingIdea && (
+                    <TabButton
+                        active={currentTab === 'ideas-graph'}
+                        onClick={() => onTabChange && onTabChange('ideas-graph')}
+                        icon={<Lightbulb size={16} />}
+                        label="Ideas Graph"
+                    />
+                )}
+                {showImprovements && (
+                    <TabButton
+                        active={currentTab === 'improvements'}
+                        onClick={() => onTabChange && onTabChange('improvements')}
+                        icon={<Sparkles size={16} />}
+                        label="Improvements"
+                    />
+                )}
                 <TabButton
                     active={currentTab === 'comments'}
                     onClick={() => onTabChange && onTabChange('comments')}
@@ -820,6 +862,22 @@ export function PreviewWrapper({ content, metadata, projectMetadata, dirHandle, 
                         onUpdateMetadata={onUpdateMetadata}
                     />
                 </div>
+
+                {/* Notes Graph Tab */}
+                {currentTab === 'graph' && hasNotesDir && isEditingNote && (
+                    <NotesGraph
+                        notesList={notesList || []}
+                        onFileSelect={onFileSelect}
+                        currentFilename={currentFilename}
+                    />
+                )}
+
+                {/* Ideas Graph Tab */}
+                {currentTab === 'ideas-graph' && hasIdeasDir && isEditingIdea && (
+                    <IdeasGraph
+                        content={currentFileContent || ''}
+                    />
+                )}
 
                 {/* Improvements Tab */}
                 {currentTab === 'improvements' && (

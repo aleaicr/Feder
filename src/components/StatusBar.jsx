@@ -147,109 +147,111 @@ export function StatusBar({
                                     </div>
                                 </div>
 
-                                <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border-color)' }}>
-                                    <label>Trigger Mode</label>
-                                    <select value={triggerMode} onChange={e => handleTriggerModeChange(e.target.value)}>
-                                        <option value="automatic">Automatic (On Stop)</option>
-                                        <option value="manual">Manual (Ctrl+Space)</option>
+                                <div style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
+                                    <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border-color)' }}>
+                                        <label>Trigger Mode</label>
+                                        <select value={triggerMode} onChange={e => handleTriggerModeChange(e.target.value)}>
+                                            <option value="automatic">Automatic (On Stop)</option>
+                                            <option value="manual">Manual (Ctrl+Space)</option>
+                                        </select>
+
+                                        {triggerMode === 'automatic' && (
+                                            <div style={{ marginTop: 8 }}>
+                                                <label>Wait Time (s)</label>
+                                                <input
+                                                    type="number"
+                                                    value={(debounceMs || 1000) / 1000}
+                                                    onChange={e => handleDebounceChange(Number(e.target.value) * 1000)}
+                                                    step="0.1"
+                                                    min="0.2"
+                                                    max="5"
+                                                    className="clean-number"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <label>Provider</label>
+                                    <select value={provider} onChange={e => handleProviderChange(e.target.value)}>
+                                        <option value="gemini">Google Gemini</option>
+                                        <option value="openai">OpenAI</option>
+                                        <option value="ollama">Ollama (Local)</option>
                                     </select>
 
-                                    {triggerMode === 'automatic' && (
-                                        <div style={{ marginTop: 8 }}>
-                                            <label>Wait Time (s)</label>
-                                            <input
-                                                type="number"
-                                                value={(debounceMs || 1000) / 1000}
-                                                onChange={e => handleDebounceChange(Number(e.target.value) * 1000)}
-                                                step="0.1"
-                                                min="0.2"
-                                                max="5"
-                                                className="clean-number"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                <label>Provider</label>
-                                <select value={provider} onChange={e => handleProviderChange(e.target.value)}>
-                                    <option value="gemini">Google Gemini</option>
-                                    <option value="openai">OpenAI</option>
-                                    <option value="ollama">Ollama (Local)</option>
-                                </select>
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <label>Model</label>
-                                    {provider === 'ollama' && (
-                                        <button
-                                            className="btn-icon-small"
-                                            onClick={() => {
-                                                const url = 'https://github.com/CodexFabrica/Feder/blob/main/docs/README_local_AI_assist.md';
-                                                if (window.electronAPI && window.electronAPI.openExternal) {
-                                                    window.electronAPI.openExternal(url);
-                                                } else {
-                                                    window.open(url, '_blank');
-                                                }
-                                            }}
-                                            title="Learn how to use local models"
-                                            style={{ color: 'var(--accent-color)', padding: '0 4px' }}
-                                        >
-                                            <HelpCircle size={14} />
-                                        </button>
-                                    )}
-                                </div>
-                                {provider === 'ollama' ? (
-                                    <input
-                                        type="text"
-                                        value={currentModel}
-                                        onChange={e => handleModelChange(e.target.value)}
-                                        placeholder="e.g. gemma3:4b (recommended)"
-                                    />
-                                ) : (
-                                    <select
-                                        value={currentModel}
-                                        onChange={e => handleModelChange(e.target.value)}
-                                    >
-                                        {provider === 'gemini' && [
-                                            'gemini-2.5-flash-lite (recommended)',
-                                            'gemini-3-flash-preview',
-                                            'gemini-3-pro-preview',
-                                            'gemini-2.5-flash',
-                                            'gemini-2.5-pro'
-                                        ].map(m => <option key={m} value={m}>{m}</option>)}
-
-                                        {provider === 'openai' && [
-                                            'gpt-5.2-chat-latest',
-                                            'gpt-5-1-chat-latest',
-                                            'gpt-5-mini',
-                                            'gpt-5-nano',
-                                            'gpt-4.1-nano',
-                                            'gpt-4o-mini',
-                                            'gpt-4o'
-                                        ].map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
-                                )}
-
-                                {provider === 'ollama' ? (
-                                    <>
-                                        <label>Base URL</label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label>Model</label>
+                                        {provider === 'ollama' && (
+                                            <button
+                                                className="btn-icon-small"
+                                                onClick={() => {
+                                                    const url = 'https://github.com/CodexFabrica/Feder/blob/main/docs/README_local_AI_assist.md';
+                                                    if (window.electronAPI && window.electronAPI.openExternal) {
+                                                        window.electronAPI.openExternal(url);
+                                                    } else {
+                                                        window.open(url, '_blank');
+                                                    }
+                                                }}
+                                                title="Learn how to use local models"
+                                                style={{ color: 'var(--accent-color)', padding: '0 4px' }}
+                                            >
+                                                <HelpCircle size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {provider === 'ollama' ? (
                                         <input
                                             type="text"
-                                            value={currentBaseUrl}
-                                            onChange={e => handleUrlChange(e.target.value)}
-                                            placeholder="http://localhost:11434"
+                                            value={currentModel}
+                                            onChange={e => handleModelChange(e.target.value)}
+                                            placeholder="e.g. gemma3:4b (recommended)"
                                         />
-                                    </>
-                                ) : (
-                                    <>
-                                        <label>API Key</label>
-                                        <input
-                                            type="password"
-                                            value={currentKey}
-                                            onChange={e => handleKeyChange(e.target.value)}
-                                            placeholder="sk-..."
-                                        />
-                                    </>
-                                )}
+                                    ) : (
+                                        <select
+                                            value={currentModel}
+                                            onChange={e => handleModelChange(e.target.value)}
+                                        >
+                                            {provider === 'gemini' && [
+                                                'gemini-2.5-flash-lite (recommended)',
+                                                'gemini-3-flash-preview',
+                                                'gemini-3-pro-preview',
+                                                'gemini-2.5-flash',
+                                                'gemini-2.5-pro'
+                                            ].map(m => <option key={m} value={m}>{m}</option>)}
+
+                                            {provider === 'openai' && [
+                                                'gpt-5.2-chat-latest',
+                                                'gpt-5-1-chat-latest',
+                                                'gpt-5-mini',
+                                                'gpt-5-nano',
+                                                'gpt-4.1-nano',
+                                                'gpt-4o-mini',
+                                                'gpt-4o'
+                                            ].map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    )}
+
+                                    {provider === 'ollama' ? (
+                                        <>
+                                            <label>Base URL</label>
+                                            <input
+                                                type="text"
+                                                value={currentBaseUrl}
+                                                onChange={e => handleUrlChange(e.target.value)}
+                                                placeholder="http://localhost:11434"
+                                            />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <label>API Key</label>
+                                            <input
+                                                type="password"
+                                                value={currentKey}
+                                                onChange={e => handleKeyChange(e.target.value)}
+                                                placeholder="sk-..."
+                                            />
+                                        </>
+                                    )}
+                                </div>
 
                                 <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
                                     <button className="btn-small" onClick={() => onOpenSettings && onOpenSettings()}>
